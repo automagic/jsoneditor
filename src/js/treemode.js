@@ -1,7 +1,7 @@
 var Highlighter = require('./Highlighter');
 var History = require('./History');
 var SearchBox = require('./SearchBox');
-var Node = require('./Node');
+var Node = require('./nodetypes').Node;
 var modeswitcher = require('./modeswitcher');
 var util = require('./util');
 

@@ -1,6 +1,10 @@
 var treemode = require('./treemode');
 var textmode = require('./textmode');
 var util = require('./util');
+var n = require('./nodetypes');
+var Node = n.Node;
+var AppendNode = n.AppendNode;
+var ContextMenu = require('./ContextMenu');
 
 /**
  * @constructor JSONEditor
@@ -258,5 +262,10 @@ JSONEditor.registerMode = function (mode) {
 // register tree and text modes
 JSONEditor.registerMode(treemode);
 JSONEditor.registerMode(textmode);
+
+JSONEditor.prototype.Node = Node;
+JSONEditor.prototype.AppendNode = AppendNode;
+
+JSONEditor.prototype.ContextMenu = ContextMenu;
 
 module.exports = JSONEditor;

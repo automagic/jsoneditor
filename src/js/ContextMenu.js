@@ -77,10 +77,18 @@ function ContextMenu (items, options) {
         // create the contents of the button
         if (item.submenu) {
           // add the icon to the button
+
+          var divContents = document.createElement('div');
+          divContents.className = 'button-contents';
+
           var divIcon = document.createElement('div');
           divIcon.className = 'icon';
-          button.appendChild(divIcon);
-          button.appendChild(document.createTextNode(item.text));
+
+          divContents.appendChild(divIcon);
+          divContents.appendChild(document.createTextNode(item.text));
+
+          button.appendChild(divContents);
+
 
           var buttonSubmenu;
           if (item.click) {
@@ -125,7 +133,7 @@ function ContextMenu (items, options) {
         }
         else {
           // no submenu, just a button with clickhandler
-          button.innerHTML = '<div class="icon"></div>' + item.text;
+          button.innerHTML = '<div class="button-contents"><div class="icon"></div>' + item.text + '</div>';
         }
 
         domItems.push(domItem);
@@ -137,9 +145,10 @@ function ContextMenu (items, options) {
   // TODO: when the editor is small, show the submenu on the right instead of inline?
 
   // calculate the max height of the menu with one submenu expanded
+  // max submenu hieght is 10
   this.maxHeight = 0; // height in pixels
   items.forEach(function (item) {
-    var height = (items.length + (item.submenu ? item.submenu.length : 0)) * 24;
+    var height = (items.length + (item.submenu ? (item.submenu.length > 10 ? 10 : item.submenu.length) : 0)) * 24;
     me.maxHeight = Math.max(me.maxHeight, height);
   });
 }
@@ -191,6 +200,7 @@ ContextMenu.prototype.show = function (anchor) {
   // position the menu
   var left = util.getAbsoluteLeft(anchor);
   var top = util.getAbsoluteTop(anchor);
+
   if (top + anchorHeight + menuHeight < windowBottom) {
     // display the menu below the anchor
     this.dom.menu.style.left = left + 'px';
@@ -200,8 +210,9 @@ ContextMenu.prototype.show = function (anchor) {
   else {
     // display the menu above the anchor
     this.dom.menu.style.left = left + 'px';
-    this.dom.menu.style.top = '';
+    this.dom.menu.style.top = ''
     this.dom.menu.style.bottom = (windowHeight - top) + 'px';
+    this.bottom = (windowHeight - top);
   }
 
   // attach the menu to the document
@@ -303,13 +314,29 @@ ContextMenu.prototype._onExpandItem = function (domItem) {
     ul.style.display = 'block';
     var height = ul.clientHeight; // force a reflow in Firefox
     setTimeout(function () {
-      if (me.expandedItem == domItem) {
-        ul.style.height = (ul.childNodes.length * 24) + 'px';
-        ul.style.padding = '5px 10px';
-      }
+        if (me.expandedItem == domItem) {
+            ul.style.height = (ul.childNodes.length * 24) + 'px';
+            ul.style.padding = '5px 10px';
+        }
+
     }, 0);
     util.addClassName(ul.parentNode, 'selected');
     this.expandedItem = domItem;
+  } else {
+      // contracting
+      setTimeout(function () {
+
+          if(me.bottom) {
+              if ( me.dom.menu.childNodes && me.dom.menu.childNodes.length && (me.dom.menu.childNodes.length * 24) > me.bottom) {
+                  me.dom.menu.style.bottom = '';
+                  me.dom.menu.style.top = '0';
+              } else {
+                  me.dom.menu.style.top = '';
+                  me.dom.menu.style.bottom = me.bottom + 'px';
+              }
+          }
+
+      }, 0);
   }
 };
 

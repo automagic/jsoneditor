@@ -132,6 +132,7 @@ textmode.create = function (container, options) {
     editor.setTheme(this.theme);
     editor.setShowPrintMargin(false);
     editor.setFontSize(13);
+    editor.setOptions({enableBasicAutocompletion: true});
     editor.getSession().setMode('ace/mode/json');
     editor.getSession().setTabSize(this.indentation);
     editor.getSession().setUseSoftTabs(true);
