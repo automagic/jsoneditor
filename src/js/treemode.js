@@ -4,6 +4,7 @@ var SearchBox = require('./SearchBox');
 var Node = require('./nodetypes').Node;
 var modeswitcher = require('./modeswitcher');
 var util = require('./util');
+var i18next = require('./i18next-1.10.1');
 
 // create a mixin with the functions for tree mode
 var treemode = {};
@@ -515,7 +516,7 @@ treemode._createFrame = function () {
   // create expand all button
   var expandAll = document.createElement('button');
   expandAll.className = 'expand-all';
-  expandAll.title = 'Expand all fields';
+  expandAll.title = i18next.t('expand_title');
   expandAll.onclick = function () {
     editor.expandAll();
   };
@@ -523,7 +524,7 @@ treemode._createFrame = function () {
 
   // create expand all button
   var collapseAll = document.createElement('button');
-  collapseAll.title = 'Collapse all fields';
+  collapseAll.title = i18next.t('collapse_title');
   collapseAll.className = 'collapse-all';
   collapseAll.onclick = function () {
     editor.collapseAll();
@@ -535,7 +536,7 @@ treemode._createFrame = function () {
     // create undo button
     var undo = document.createElement('button');
     undo.className = 'undo separator';
-    undo.title = 'Undo last action (Ctrl+Z)';
+    undo.title = i18next.t('undo_title');
     undo.onclick = function () {
       editor._onUndo();
     };
@@ -545,7 +546,7 @@ treemode._createFrame = function () {
     // create redo button
     var redo = document.createElement('button');
     redo.className = 'redo';
-    redo.title = 'Redo (Ctrl+Shift+Z)';
+    redo.title = i18next.t('redo_title');;
     redo.onclick = function () {
       editor._onRedo();
     };

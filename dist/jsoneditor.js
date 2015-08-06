@@ -24,7 +24,7 @@
  *
  * @author  Jos de Jong, <wjosdejong@gmail.com>
  * @version 4.2.0
- * @date    2015-05-14
+ * @date    2015-08-06
  */
 (function webpackUniversalModuleDefinition(root, factory) {
 	if(typeof exports === 'object' && typeof module === 'object')
@@ -83,8 +83,14 @@ return /******/ (function(modules) { // webpackBootstrap
 /***/ function(module, exports, __webpack_require__) {
 
 	var treemode = __webpack_require__(1);
-	var textmode = __webpack_require__(2);
-	var util = __webpack_require__(3);
+	var textmode = __webpack_require__(11);
+	var util = __webpack_require__(4);
+	var n = __webpack_require__(8);
+	var Node = n.Node;
+	var AppendNode = n.AppendNode;
+	var ContextMenu = __webpack_require__(9);
+	var i18next = __webpack_require__(7);
+	var resources = __webpack_require__(21);
 
 	/**
 	 * @constructor JSONEditor
@@ -123,6 +129,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	    throw new Error('Unsupported browser, IE9 or newer required. ' +
 	        'Please install the newest version of your browser.');
 	  }
+	  
+	  i18next.init({ resStore: resources.locales });
 
 	  if (arguments.length) {
 	    this._create(container, options, json);
@@ -343,6 +351,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	JSONEditor.registerMode(treemode);
 	JSONEditor.registerMode(textmode);
 
+	JSONEditor.prototype.Node = Node;
+	JSONEditor.prototype.AppendNode = AppendNode;
+
+	JSONEditor.prototype.ContextMenu = ContextMenu;
+
 	module.exports = JSONEditor;
 
 
@@ -350,12 +363,13 @@ return /******/ (function(modules) { // webpackBootstrap
 /* 1 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var Highlighter = __webpack_require__(4);
-	var History = __webpack_require__(5);
+	var Highlighter = __webpack_require__(2);
+	var History = __webpack_require__(3);
 	var SearchBox = __webpack_require__(6);
-	var Node = __webpack_require__(7);
-	var modeswitcher = __webpack_require__(8);
-	var util = __webpack_require__(3);
+	var Node = __webpack_require__(8).Node;
+	var modeswitcher = __webpack_require__(10);
+	var util = __webpack_require__(4);
+	var i18next = __webpack_require__(7);
 
 	// create a mixin with the functions for tree mode
 	var treemode = {};
@@ -867,7 +881,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	  // create expand all button
 	  var expandAll = document.createElement('button');
 	  expandAll.className = 'expand-all';
-	  expandAll.title = 'Expand all fields';
+	  expandAll.title = i18next.t('expand_title');
 	  expandAll.onclick = function () {
 	    editor.expandAll();
 	  };
@@ -875,7 +889,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	  // create expand all button
 	  var collapseAll = document.createElement('button');
-	  collapseAll.title = 'Collapse all fields';
+	  collapseAll.title = i18next.t('collapse_title');
 	  collapseAll.className = 'collapse-all';
 	  collapseAll.onclick = function () {
 	    editor.collapseAll();
@@ -887,7 +901,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    // create undo button
 	    var undo = document.createElement('button');
 	    undo.className = 'undo separator';
-	    undo.title = 'Undo last action (Ctrl+Z)';
+	    undo.title = i18next.t('undo_title');
 	    undo.onclick = function () {
 	      editor._onUndo();
 	    };
@@ -897,7 +911,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    // create redo button
 	    var redo = document.createElement('button');
 	    redo.className = 'redo';
-	    redo.title = 'Redo (Ctrl+Shift+Z)';
+	    redo.title = i18next.t('redo_title');;
 	    redo.onclick = function () {
 	      editor._onRedo();
 	    };
@@ -1097,369 +1111,327 @@ return /******/ (function(modules) { // webpackBootstrap
 
 /***/ },
 /* 2 */
-/***/ function(module, exports, __webpack_require__) {
-
-	var ace;
-	try {
-	  ace = __webpack_require__(9);
-	}
-	catch (err) {
-	  // failed to load ace, no problem, we will fall back to plain text
-	}
-
-	var modeswitcher = __webpack_require__(8);
-	var util = __webpack_require__(3);
-
-	// create a mixin with the functions for text mode
-	var textmode = {};
+/***/ function(module, exports) {
 
 	/**
-	 * Create a text editor
-	 * @param {Element} container
-	 * @param {Object} [options]         Object with options. available options:
-	 *                                   {String} mode         Available values:
-	 *                                                         "text" (default)
-	 *                                                         or "code".
-	 *                                   {Number} indentation  Number of indentation
-	 *                                                         spaces. 2 by default.
-	 *                                   {function} change     Callback method
-	 *                                                         triggered on change
-	 *                                   {Object} ace          A custom instance of
-	 *                                                         Ace editor.
-	 * @private
+	 * The highlighter can highlight/unhighlight a node, and
+	 * animate the visibility of a context menu.
+	 * @constructor Highlighter
 	 */
-	textmode.create = function (container, options) {
-	  // read options
-	  options = options || {};
-	  this.options = options;
+	function Highlighter () {
+	  this.locked = false;
+	}
 
-	  // indentation
-	  if (options.indentation) {
-	    this.indentation = Number(options.indentation);
+	/**
+	 * Hightlight given node and its childs
+	 * @param {Node} node
+	 */
+	Highlighter.prototype.highlight = function (node) {
+	  if (this.locked) {
+	    return;
 	  }
-	  else {
-	    this.indentation = 2; // number of spaces
-	  }
 
-	  // grab ace from options if provided
-	  var _ace = options.ace ? options.ace : ace;
-
-	  // determine mode
-	  this.mode = (options.mode == 'code') ? 'code' : 'text';
-	  if (this.mode == 'code') {
-	    // verify whether Ace editor is available and supported
-	    if (typeof _ace === 'undefined') {
-	      this.mode = 'text';
-	      util.log('WARNING: Cannot load code editor, Ace library not loaded. ' +
-	          'Falling back to plain text editor');
+	  if (this.node != node) {
+	    // unhighlight current node
+	    if (this.node) {
+	      this.node.setHighlight(false);
 	    }
+
+	    // highlight new node
+	    this.node = node;
+	    this.node.setHighlight(true);
 	  }
 
-	  // determine theme
-	  this.theme = options.theme || 'ace/theme/jsoneditor';
+	  // cancel any current timeout
+	  this._cancelUnhighlight();
+	};
+
+	/**
+	 * Unhighlight currently highlighted node.
+	 * Will be done after a delay
+	 */
+	Highlighter.prototype.unhighlight = function () {
+	  if (this.locked) {
+	    return;
+	  }
 
 	  var me = this;
-	  this.container = container;
-	  this.dom = {};
-	  this.editor = undefined;    // ace code editor
-	  this.textarea = undefined;  // plain text editor (fallback when Ace is not available)
+	  if (this.node) {
+	    this._cancelUnhighlight();
 
-	  this.width = container.clientWidth;
-	  this.height = container.clientHeight;
-
-	  this.frame = document.createElement('div');
-	  this.frame.className = 'jsoneditor';
-	  this.frame.onclick = function (event) {
-	    // prevent default submit action when the editor is located inside a form
-	    event.preventDefault();
-	  };
-	  this.frame.onkeydown = function (event) {
-	    me._onKeyDown(event);
-	  };
-
-	  // create menu
-	  this.menu = document.createElement('div');
-	  this.menu.className = 'menu';
-	  this.frame.appendChild(this.menu);
-
-	  // create format button
-	  var buttonFormat = document.createElement('button');
-	  buttonFormat.className = 'format';
-	  buttonFormat.title = 'Format JSON data, with proper indentation and line feeds (Ctrl+\\)';
-	  this.menu.appendChild(buttonFormat);
-	  buttonFormat.onclick = function () {
-	    try {
-	      me.format();
-	    }
-	    catch (err) {
-	      me._onError(err);
-	    }
-	  };
-
-	  // create compact button
-	  var buttonCompact = document.createElement('button');
-	  buttonCompact.className = 'compact';
-	  buttonCompact.title = 'Compact JSON data, remove all whitespaces (Ctrl+Shift+\\)';
-	  this.menu.appendChild(buttonCompact);
-	  buttonCompact.onclick = function () {
-	    try {
-	      me.compact();
-	    }
-	    catch (err) {
-	      me._onError(err);
-	    }
-	  };
-
-	  // create mode box
-	  if (this.options && this.options.modes && this.options.modes.length) {
-	    var modeBox = modeswitcher.create(this, this.options.modes, this.options.mode);
-	    this.menu.appendChild(modeBox);
-	    this.dom.modeBox = modeBox;
-	  }
-
-	  this.content = document.createElement('div');
-	  this.content.className = 'outer';
-	  this.frame.appendChild(this.content);
-
-	  this.container.appendChild(this.frame);
-
-	  if (this.mode == 'code') {
-	    this.editorDom = document.createElement('div');
-	    this.editorDom.style.height = '100%'; // TODO: move to css
-	    this.editorDom.style.width = '100%'; // TODO: move to css
-	    this.content.appendChild(this.editorDom);
-
-	    var editor = _ace.edit(this.editorDom);
-	    editor.setTheme(this.theme);
-	    editor.setShowPrintMargin(false);
-	    editor.setFontSize(13);
-	    editor.getSession().setMode('ace/mode/json');
-	    editor.getSession().setTabSize(this.indentation);
-	    editor.getSession().setUseSoftTabs(true);
-	    editor.getSession().setUseWrapMode(true);
-	    this.editor = editor;
-
-	    var poweredBy = document.createElement('a');
-	    poweredBy.appendChild(document.createTextNode('powered by ace'));
-	    poweredBy.href = 'http://ace.ajax.org';
-	    poweredBy.target = '_blank';
-	    poweredBy.className = 'poweredBy';
-	    poweredBy.onclick = function () {
-	      // TODO: this anchor falls below the margin of the content,
-	      // therefore the normal a.href does not work. We use a click event
-	      // for now, but this should be fixed.
-	      window.open(poweredBy.href, poweredBy.target);
-	    };
-	    this.menu.appendChild(poweredBy);
-
-	    if (options.change) {
-	      // register onchange event
-	      editor.on('change', function () {
-	        options.change();
-	      });
-	    }
-	  }
-	  else {
-	    // load a plain text textarea
-	    var textarea = document.createElement('textarea');
-	    textarea.className = 'text';
-	    textarea.spellcheck = false;
-	    this.content.appendChild(textarea);
-	    this.textarea = textarea;
-
-	    if (options.change) {
-	      // register onchange event
-	      if (this.textarea.oninput === null) {
-	        this.textarea.oninput = function () {
-	          options.change();
-	        }
-	      }
-	      else {
-	        // oninput is undefined. For IE8-
-	        this.textarea.onchange = function () {
-	          options.change();
-	        }
-	      }
-	    }
+	    // do the unhighlighting after a small delay, to prevent re-highlighting
+	    // the same node when moving from the drag-icon to the contextmenu-icon
+	    // or vice versa.
+	    this.unhighlightTimer = setTimeout(function () {
+	      me.node.setHighlight(false);
+	      me.node = undefined;
+	      me.unhighlightTimer = undefined;
+	    }, 0);
 	  }
 	};
 
 	/**
-	 * Event handler for keydown. Handles shortcut keys
-	 * @param {Event} event
+	 * Cancel an unhighlight action (if before the timeout of the unhighlight action)
 	 * @private
 	 */
-	textmode._onKeyDown = function (event) {
-	  var keynum = event.which || event.keyCode;
-	  var handled = false;
-
-	  if (keynum == 220 && event.ctrlKey) {
-	    if (event.shiftKey) { // Ctrl+Shift+\
-	      this.compact();
-	    }
-	    else { // Ctrl+\
-	      this.format();
-	    }
-	    handled = true;
-	  }
-
-	  if (handled) {
-	    event.preventDefault();
-	    event.stopPropagation();
+	Highlighter.prototype._cancelUnhighlight = function () {
+	  if (this.unhighlightTimer) {
+	    clearTimeout(this.unhighlightTimer);
+	    this.unhighlightTimer = undefined;
 	  }
 	};
 
 	/**
-	 * Detach the editor from the DOM
-	 * @private
+	 * Lock highlighting or unhighlighting nodes.
+	 * methods highlight and unhighlight do not work while locked.
 	 */
-	textmode._delete = function () {
-	  if (this.frame && this.container && this.frame.parentNode == this.container) {
-	    this.container.removeChild(this.frame);
-	  }
+	Highlighter.prototype.lock = function () {
+	  this.locked = true;
 	};
 
 	/**
-	 * Throw an error. If an error callback is configured in options.error, this
-	 * callback will be invoked. Else, a regular error is thrown.
-	 * @param {Error} err
-	 * @private
+	 * Unlock highlighting or unhighlighting nodes
 	 */
-	textmode._onError = function(err) {
-	  // TODO: onError is deprecated since version 2.2.0. cleanup some day
-	  if (typeof this.onError === 'function') {
-	    util.log('WARNING: JSONEditor.onError is deprecated. ' +
-	        'Use options.error instead.');
-	    this.onError(err);
-	  }
-
-	  if (this.options && typeof this.options.error === 'function') {
-	    this.options.error(err);
-	  }
-	  else {
-	    throw err;
-	  }
+	Highlighter.prototype.unlock = function () {
+	  this.locked = false;
 	};
 
-	/**
-	 * Compact the code in the formatter
-	 */
-	textmode.compact = function () {
-	  var json = this.get();
-	  var text = JSON.stringify(json);
-	  this.setText(text);
-	};
-
-	/**
-	 * Format the code in the formatter
-	 */
-	textmode.format = function () {
-	  var json = this.get();
-	  var text = JSON.stringify(json, null, this.indentation);
-	  this.setText(text);
-	};
-
-	/**
-	 * Set focus to the formatter
-	 */
-	textmode.focus = function () {
-	  if (this.textarea) {
-	    this.textarea.focus();
-	  }
-	  if (this.editor) {
-	    this.editor.focus();
-	  }
-	};
-
-	/**
-	 * Resize the formatter
-	 */
-	textmode.resize = function () {
-	  if (this.editor) {
-	    var force = false;
-	    this.editor.resize(force);
-	  }
-	};
-
-	/**
-	 * Set json data in the formatter
-	 * @param {Object} json
-	 */
-	textmode.set = function(json) {
-	  this.setText(JSON.stringify(json, null, this.indentation));
-	};
-
-	/**
-	 * Get json data from the formatter
-	 * @return {Object} json
-	 */
-	textmode.get = function() {
-	  var text = this.getText();
-	  var json;
-
-	  try {
-	    json = util.parse(text); // this can throw an error
-	  }
-	  catch (err) {
-	    // try to sanitize json, replace JavaScript notation with JSON notation
-	    text = util.sanitize(text);
-
-	    // try to parse again
-	    json = util.parse(text); // this can throw an error
-	  }
-
-	  return json;
-	};
-
-	/**
-	 * Get the text contents of the editor
-	 * @return {String} jsonText
-	 */
-	textmode.getText = function() {
-	  if (this.textarea) {
-	    return this.textarea.value;
-	  }
-	  if (this.editor) {
-	    return this.editor.getValue();
-	  }
-	  return '';
-	};
-
-	/**
-	 * Set the text contents of the editor
-	 * @param {String} jsonText
-	 */
-	textmode.setText = function(jsonText) {
-	  if (this.textarea) {
-	    this.textarea.value = jsonText;
-	  }
-	  if (this.editor) {
-	    this.editor.setValue(jsonText, -1);
-	  }
-	};
-
-	// define modes
-	module.exports = [
-	  {
-	    mode: 'text',
-	    mixin: textmode,
-	    data: 'text',
-	    load: textmode.format
-	  },
-	  {
-	    mode: 'code',
-	    mixin: textmode,
-	    data: 'text',
-	    load: textmode.format
-	  }
-	];
+	module.exports = Highlighter;
 
 
 /***/ },
 /* 3 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var jsonlint = __webpack_require__(12);
+	var util = __webpack_require__(4);
+
+	/**
+	 * @constructor History
+	 * Store action history, enables undo and redo
+	 * @param {JSONEditor} editor
+	 */
+	function History (editor) {
+	  this.editor = editor;
+	  this.clear();
+
+	  // map with all supported actions
+	  this.actions = {
+	    'editField': {
+	      'undo': function (params) {
+	        params.node.updateField(params.oldValue);
+	      },
+	      'redo': function (params) {
+	        params.node.updateField(params.newValue);
+	      }
+	    },
+	    'editValue': {
+	      'undo': function (params) {
+	        params.node.updateValue(params.oldValue);
+	      },
+	      'redo': function (params) {
+	        params.node.updateValue(params.newValue);
+	      }
+	    },
+	    'appendNode': {
+	      'undo': function (params) {
+	        params.parent.removeChild(params.node);
+	      },
+	      'redo': function (params) {
+	        params.parent.appendChild(params.node);
+	      }
+	    },
+	    'insertBeforeNode': {
+	      'undo': function (params) {
+	        params.parent.removeChild(params.node);
+	      },
+	      'redo': function (params) {
+	        params.parent.insertBefore(params.node, params.beforeNode);
+	      }
+	    },
+	    'insertAfterNode': {
+	      'undo': function (params) {
+	        params.parent.removeChild(params.node);
+	      },
+	      'redo': function (params) {
+	        params.parent.insertAfter(params.node, params.afterNode);
+	      }
+	    },
+	    'removeNode': {
+	      'undo': function (params) {
+	        var parent = params.parent;
+	        var beforeNode = parent.childs[params.index] || parent.append;
+	        parent.insertBefore(params.node, beforeNode);
+	      },
+	      'redo': function (params) {
+	        params.parent.removeChild(params.node);
+	      }
+	    },
+	    'duplicateNode': {
+	      'undo': function (params) {
+	        params.parent.removeChild(params.clone);
+	      },
+	      'redo': function (params) {
+	        params.parent.insertAfter(params.clone, params.node);
+	      }
+	    },
+	    'changeType': {
+	      'undo': function (params) {
+	        params.node.changeType(params.oldType);
+	      },
+	      'redo': function (params) {
+	        params.node.changeType(params.newType);
+	      }
+	    },
+	    'moveNode': {
+	      'undo': function (params) {
+	        params.startParent.moveTo(params.node, params.startIndex);
+	      },
+	      'redo': function (params) {
+	        params.endParent.moveTo(params.node, params.endIndex);
+	      }
+	    },
+	    'sort': {
+	      'undo': function (params) {
+	        var node = params.node;
+	        node.hideChilds();
+	        node.sort = params.oldSort;
+	        node.childs = params.oldChilds;
+	        node.showChilds();
+	      },
+	      'redo': function (params) {
+	        var node = params.node;
+	        node.hideChilds();
+	        node.sort = params.newSort;
+	        node.childs = params.newChilds;
+	        node.showChilds();
+	      }
+	    }
+
+	    // TODO: restore the original caret position and selection with each undo
+	    // TODO: implement history for actions "expand", "collapse", "scroll", "setDocument"
+	  };
+	}
+
+	/**
+	 * The method onChange is executed when the History is changed, and can
+	 * be overloaded.
+	 */
+	History.prototype.onChange = function () {};
+
+	/**
+	 * Add a new action to the history
+	 * @param {String} action  The executed action. Available actions: "editField",
+	 *                         "editValue", "changeType", "appendNode",
+	 *                         "removeNode", "duplicateNode", "moveNode"
+	 * @param {Object} params  Object containing parameters describing the change.
+	 *                         The parameters in params depend on the action (for
+	 *                         example for "editValue" the Node, old value, and new
+	 *                         value are provided). params contains all information
+	 *                         needed to undo or redo the action.
+	 */
+	History.prototype.add = function (action, params) {
+	  this.index++;
+	  this.history[this.index] = {
+	    'action': action,
+	    'params': params,
+	    'timestamp': new Date()
+	  };
+
+	  // remove redo actions which are invalid now
+	  if (this.index < this.history.length - 1) {
+	    this.history.splice(this.index + 1, this.history.length - this.index - 1);
+	  }
+
+	  // fire onchange event
+	  this.onChange();
+	};
+
+	/**
+	 * Clear history
+	 */
+	History.prototype.clear = function () {
+	  this.history = [];
+	  this.index = -1;
+
+	  // fire onchange event
+	  this.onChange();
+	};
+
+	/**
+	 * Check if there is an action available for undo
+	 * @return {Boolean} canUndo
+	 */
+	History.prototype.canUndo = function () {
+	  return (this.index >= 0);
+	};
+
+	/**
+	 * Check if there is an action available for redo
+	 * @return {Boolean} canRedo
+	 */
+	History.prototype.canRedo = function () {
+	  return (this.index < this.history.length - 1);
+	};
+
+	/**
+	 * Undo the last action
+	 */
+	History.prototype.undo = function () {
+	  if (this.canUndo()) {
+	    var obj = this.history[this.index];
+	    if (obj) {
+	      var action = this.actions[obj.action];
+	      if (action && action.undo) {
+	        action.undo(obj.params);
+	        if (obj.params.oldSelection) {
+	          this.editor.setSelection(obj.params.oldSelection);
+	        }
+	      }
+	      else {
+	        util.log('Error: unknown action "' + obj.action + '"');
+	      }
+	    }
+	    this.index--;
+
+	    // fire onchange event
+	    this.onChange();
+	  }
+	};
+
+	/**
+	 * Redo the last action
+	 */
+	History.prototype.redo = function () {
+	  if (this.canRedo()) {
+	    this.index++;
+
+	    var obj = this.history[this.index];
+	    if (obj) {
+	      var action = this.actions[obj.action];
+	      if (action && action.redo) {
+	        action.redo(obj.params);
+	        if (obj.params.newSelection) {
+	          this.editor.setSelection(obj.params.newSelection);
+	        }
+	      }
+	      else {
+	        util.log('Error: unknown action "' + obj.action + '"');
+	      }
+	    }
+
+	    // fire onchange event
+	    this.onChange();
+	  }
+	};
+
+	module.exports = History;
+
+
+/***/ },
+/* 4 */
+/***/ function(module, exports, __webpack_require__) {
+
+	var jsonlint = __webpack_require__(5);
 
 	/**
 	 * Parse JSON using the parser built-in in the browser.
@@ -2075,326 +2047,433 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 4 */
-/***/ function(module, exports, __webpack_require__) {
-
-	/**
-	 * The highlighter can highlight/unhighlight a node, and
-	 * animate the visibility of a context menu.
-	 * @constructor Highlighter
-	 */
-	function Highlighter () {
-	  this.locked = false;
-	}
-
-	/**
-	 * Hightlight given node and its childs
-	 * @param {Node} node
-	 */
-	Highlighter.prototype.highlight = function (node) {
-	  if (this.locked) {
-	    return;
-	  }
-
-	  if (this.node != node) {
-	    // unhighlight current node
-	    if (this.node) {
-	      this.node.setHighlight(false);
-	    }
-
-	    // highlight new node
-	    this.node = node;
-	    this.node.setHighlight(true);
-	  }
-
-	  // cancel any current timeout
-	  this._cancelUnhighlight();
-	};
-
-	/**
-	 * Unhighlight currently highlighted node.
-	 * Will be done after a delay
-	 */
-	Highlighter.prototype.unhighlight = function () {
-	  if (this.locked) {
-	    return;
-	  }
-
-	  var me = this;
-	  if (this.node) {
-	    this._cancelUnhighlight();
-
-	    // do the unhighlighting after a small delay, to prevent re-highlighting
-	    // the same node when moving from the drag-icon to the contextmenu-icon
-	    // or vice versa.
-	    this.unhighlightTimer = setTimeout(function () {
-	      me.node.setHighlight(false);
-	      me.node = undefined;
-	      me.unhighlightTimer = undefined;
-	    }, 0);
-	  }
-	};
-
-	/**
-	 * Cancel an unhighlight action (if before the timeout of the unhighlight action)
-	 * @private
-	 */
-	Highlighter.prototype._cancelUnhighlight = function () {
-	  if (this.unhighlightTimer) {
-	    clearTimeout(this.unhighlightTimer);
-	    this.unhighlightTimer = undefined;
-	  }
-	};
-
-	/**
-	 * Lock highlighting or unhighlighting nodes.
-	 * methods highlight and unhighlight do not work while locked.
-	 */
-	Highlighter.prototype.lock = function () {
-	  this.locked = true;
-	};
-
-	/**
-	 * Unlock highlighting or unhighlighting nodes
-	 */
-	Highlighter.prototype.unlock = function () {
-	  this.locked = false;
-	};
-
-	module.exports = Highlighter;
-
-
-/***/ },
 /* 5 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var util = __webpack_require__(3);
+	/* Jison generated parser */
+	var jsonlint = (function(){
+	var parser = {trace: function trace() { },
+	yy: {},
+	symbols_: {"error":2,"JSONString":3,"STRING":4,"JSONNumber":5,"NUMBER":6,"JSONNullLiteral":7,"NULL":8,"JSONBooleanLiteral":9,"TRUE":10,"FALSE":11,"JSONText":12,"JSONValue":13,"EOF":14,"JSONObject":15,"JSONArray":16,"{":17,"}":18,"JSONMemberList":19,"JSONMember":20,":":21,",":22,"[":23,"]":24,"JSONElementList":25,"$accept":0,"$end":1},
+	terminals_: {2:"error",4:"STRING",6:"NUMBER",8:"NULL",10:"TRUE",11:"FALSE",14:"EOF",17:"{",18:"}",21:":",22:",",23:"[",24:"]"},
+	productions_: [0,[3,1],[5,1],[7,1],[9,1],[9,1],[12,2],[13,1],[13,1],[13,1],[13,1],[13,1],[13,1],[15,2],[15,3],[20,3],[19,1],[19,3],[16,2],[16,3],[25,1],[25,3]],
+	performAction: function anonymous(yytext,yyleng,yylineno,yy,yystate,$$,_$) {
 
-	/**
-	 * @constructor History
-	 * Store action history, enables undo and redo
-	 * @param {JSONEditor} editor
-	 */
-	function History (editor) {
-	  this.editor = editor;
-	  this.clear();
-
-	  // map with all supported actions
-	  this.actions = {
-	    'editField': {
-	      'undo': function (params) {
-	        params.node.updateField(params.oldValue);
-	      },
-	      'redo': function (params) {
-	        params.node.updateField(params.newValue);
-	      }
-	    },
-	    'editValue': {
-	      'undo': function (params) {
-	        params.node.updateValue(params.oldValue);
-	      },
-	      'redo': function (params) {
-	        params.node.updateValue(params.newValue);
-	      }
-	    },
-	    'appendNode': {
-	      'undo': function (params) {
-	        params.parent.removeChild(params.node);
-	      },
-	      'redo': function (params) {
-	        params.parent.appendChild(params.node);
-	      }
-	    },
-	    'insertBeforeNode': {
-	      'undo': function (params) {
-	        params.parent.removeChild(params.node);
-	      },
-	      'redo': function (params) {
-	        params.parent.insertBefore(params.node, params.beforeNode);
-	      }
-	    },
-	    'insertAfterNode': {
-	      'undo': function (params) {
-	        params.parent.removeChild(params.node);
-	      },
-	      'redo': function (params) {
-	        params.parent.insertAfter(params.node, params.afterNode);
-	      }
-	    },
-	    'removeNode': {
-	      'undo': function (params) {
-	        var parent = params.parent;
-	        var beforeNode = parent.childs[params.index] || parent.append;
-	        parent.insertBefore(params.node, beforeNode);
-	      },
-	      'redo': function (params) {
-	        params.parent.removeChild(params.node);
-	      }
-	    },
-	    'duplicateNode': {
-	      'undo': function (params) {
-	        params.parent.removeChild(params.clone);
-	      },
-	      'redo': function (params) {
-	        params.parent.insertAfter(params.clone, params.node);
-	      }
-	    },
-	    'changeType': {
-	      'undo': function (params) {
-	        params.node.changeType(params.oldType);
-	      },
-	      'redo': function (params) {
-	        params.node.changeType(params.newType);
-	      }
-	    },
-	    'moveNode': {
-	      'undo': function (params) {
-	        params.startParent.moveTo(params.node, params.startIndex);
-	      },
-	      'redo': function (params) {
-	        params.endParent.moveTo(params.node, params.endIndex);
-	      }
-	    },
-	    'sort': {
-	      'undo': function (params) {
-	        var node = params.node;
-	        node.hideChilds();
-	        node.sort = params.oldSort;
-	        node.childs = params.oldChilds;
-	        node.showChilds();
-	      },
-	      'redo': function (params) {
-	        var node = params.node;
-	        node.hideChilds();
-	        node.sort = params.newSort;
-	        node.childs = params.newChilds;
-	        node.showChilds();
-	      }
-	    }
-
-	    // TODO: restore the original caret position and selection with each undo
-	    // TODO: implement history for actions "expand", "collapse", "scroll", "setDocument"
-	  };
+	var $0 = $$.length - 1;
+	switch (yystate) {
+	case 1: // replace escaped characters with actual character
+	          this.$ = yytext.replace(/\\(\\|")/g, "$"+"1")
+	                     .replace(/\\n/g,'\n')
+	                     .replace(/\\r/g,'\r')
+	                     .replace(/\\t/g,'\t')
+	                     .replace(/\\v/g,'\v')
+	                     .replace(/\\f/g,'\f')
+	                     .replace(/\\b/g,'\b');
+	        
+	break;
+	case 2:this.$ = Number(yytext);
+	break;
+	case 3:this.$ = null;
+	break;
+	case 4:this.$ = true;
+	break;
+	case 5:this.$ = false;
+	break;
+	case 6:return this.$ = $$[$0-1];
+	break;
+	case 13:this.$ = {};
+	break;
+	case 14:this.$ = $$[$0-1];
+	break;
+	case 15:this.$ = [$$[$0-2], $$[$0]];
+	break;
+	case 16:this.$ = {}; this.$[$$[$0][0]] = $$[$0][1];
+	break;
+	case 17:this.$ = $$[$0-2]; $$[$0-2][$$[$0][0]] = $$[$0][1];
+	break;
+	case 18:this.$ = [];
+	break;
+	case 19:this.$ = $$[$0-1];
+	break;
+	case 20:this.$ = [$$[$0]];
+	break;
+	case 21:this.$ = $$[$0-2]; $$[$0-2].push($$[$0]);
+	break;
 	}
+	},
+	table: [{3:5,4:[1,12],5:6,6:[1,13],7:3,8:[1,9],9:4,10:[1,10],11:[1,11],12:1,13:2,15:7,16:8,17:[1,14],23:[1,15]},{1:[3]},{14:[1,16]},{14:[2,7],18:[2,7],22:[2,7],24:[2,7]},{14:[2,8],18:[2,8],22:[2,8],24:[2,8]},{14:[2,9],18:[2,9],22:[2,9],24:[2,9]},{14:[2,10],18:[2,10],22:[2,10],24:[2,10]},{14:[2,11],18:[2,11],22:[2,11],24:[2,11]},{14:[2,12],18:[2,12],22:[2,12],24:[2,12]},{14:[2,3],18:[2,3],22:[2,3],24:[2,3]},{14:[2,4],18:[2,4],22:[2,4],24:[2,4]},{14:[2,5],18:[2,5],22:[2,5],24:[2,5]},{14:[2,1],18:[2,1],21:[2,1],22:[2,1],24:[2,1]},{14:[2,2],18:[2,2],22:[2,2],24:[2,2]},{3:20,4:[1,12],18:[1,17],19:18,20:19},{3:5,4:[1,12],5:6,6:[1,13],7:3,8:[1,9],9:4,10:[1,10],11:[1,11],13:23,15:7,16:8,17:[1,14],23:[1,15],24:[1,21],25:22},{1:[2,6]},{14:[2,13],18:[2,13],22:[2,13],24:[2,13]},{18:[1,24],22:[1,25]},{18:[2,16],22:[2,16]},{21:[1,26]},{14:[2,18],18:[2,18],22:[2,18],24:[2,18]},{22:[1,28],24:[1,27]},{22:[2,20],24:[2,20]},{14:[2,14],18:[2,14],22:[2,14],24:[2,14]},{3:20,4:[1,12],20:29},{3:5,4:[1,12],5:6,6:[1,13],7:3,8:[1,9],9:4,10:[1,10],11:[1,11],13:30,15:7,16:8,17:[1,14],23:[1,15]},{14:[2,19],18:[2,19],22:[2,19],24:[2,19]},{3:5,4:[1,12],5:6,6:[1,13],7:3,8:[1,9],9:4,10:[1,10],11:[1,11],13:31,15:7,16:8,17:[1,14],23:[1,15]},{18:[2,17],22:[2,17]},{18:[2,15],22:[2,15]},{22:[2,21],24:[2,21]}],
+	defaultActions: {16:[2,6]},
+	parseError: function parseError(str, hash) {
+	    throw new Error(str);
+	},
+	parse: function parse(input) {
+	    var self = this,
+	        stack = [0],
+	        vstack = [null], // semantic value stack
+	        lstack = [], // location stack
+	        table = this.table,
+	        yytext = '',
+	        yylineno = 0,
+	        yyleng = 0,
+	        recovering = 0,
+	        TERROR = 2,
+	        EOF = 1;
 
-	/**
-	 * The method onChange is executed when the History is changed, and can
-	 * be overloaded.
-	 */
-	History.prototype.onChange = function () {};
+	    //this.reductionCount = this.shiftCount = 0;
 
-	/**
-	 * Add a new action to the history
-	 * @param {String} action  The executed action. Available actions: "editField",
-	 *                         "editValue", "changeType", "appendNode",
-	 *                         "removeNode", "duplicateNode", "moveNode"
-	 * @param {Object} params  Object containing parameters describing the change.
-	 *                         The parameters in params depend on the action (for
-	 *                         example for "editValue" the Node, old value, and new
-	 *                         value are provided). params contains all information
-	 *                         needed to undo or redo the action.
-	 */
-	History.prototype.add = function (action, params) {
-	  this.index++;
-	  this.history[this.index] = {
-	    'action': action,
-	    'params': params,
-	    'timestamp': new Date()
-	  };
+	    this.lexer.setInput(input);
+	    this.lexer.yy = this.yy;
+	    this.yy.lexer = this.lexer;
+	    if (typeof this.lexer.yylloc == 'undefined')
+	        this.lexer.yylloc = {};
+	    var yyloc = this.lexer.yylloc;
+	    lstack.push(yyloc);
 
-	  // remove redo actions which are invalid now
-	  if (this.index < this.history.length - 1) {
-	    this.history.splice(this.index + 1, this.history.length - this.index - 1);
-	  }
+	    if (typeof this.yy.parseError === 'function')
+	        this.parseError = this.yy.parseError;
 
-	  // fire onchange event
-	  this.onChange();
-	};
-
-	/**
-	 * Clear history
-	 */
-	History.prototype.clear = function () {
-	  this.history = [];
-	  this.index = -1;
-
-	  // fire onchange event
-	  this.onChange();
-	};
-
-	/**
-	 * Check if there is an action available for undo
-	 * @return {Boolean} canUndo
-	 */
-	History.prototype.canUndo = function () {
-	  return (this.index >= 0);
-	};
-
-	/**
-	 * Check if there is an action available for redo
-	 * @return {Boolean} canRedo
-	 */
-	History.prototype.canRedo = function () {
-	  return (this.index < this.history.length - 1);
-	};
-
-	/**
-	 * Undo the last action
-	 */
-	History.prototype.undo = function () {
-	  if (this.canUndo()) {
-	    var obj = this.history[this.index];
-	    if (obj) {
-	      var action = this.actions[obj.action];
-	      if (action && action.undo) {
-	        action.undo(obj.params);
-	        if (obj.params.oldSelection) {
-	          this.editor.setSelection(obj.params.oldSelection);
-	        }
-	      }
-	      else {
-	        util.log('Error: unknown action "' + obj.action + '"');
-	      }
-	    }
-	    this.index--;
-
-	    // fire onchange event
-	    this.onChange();
-	  }
-	};
-
-	/**
-	 * Redo the last action
-	 */
-	History.prototype.redo = function () {
-	  if (this.canRedo()) {
-	    this.index++;
-
-	    var obj = this.history[this.index];
-	    if (obj) {
-	      var action = this.actions[obj.action];
-	      if (action && action.redo) {
-	        action.redo(obj.params);
-	        if (obj.params.newSelection) {
-	          this.editor.setSelection(obj.params.newSelection);
-	        }
-	      }
-	      else {
-	        util.log('Error: unknown action "' + obj.action + '"');
-	      }
+	    function popStack (n) {
+	        stack.length = stack.length - 2*n;
+	        vstack.length = vstack.length - n;
+	        lstack.length = lstack.length - n;
 	    }
 
-	    // fire onchange event
-	    this.onChange();
-	  }
+	    function lex() {
+	        var token;
+	        token = self.lexer.lex() || 1; // $end = 1
+	        // if token isn't its numeric value, convert
+	        if (typeof token !== 'number') {
+	            token = self.symbols_[token] || token;
+	        }
+	        return token;
+	    }
+
+	    var symbol, preErrorSymbol, state, action, a, r, yyval={},p,len,newState, expected;
+	    while (true) {
+	        // retreive state number from top of stack
+	        state = stack[stack.length-1];
+
+	        // use default actions if available
+	        if (this.defaultActions[state]) {
+	            action = this.defaultActions[state];
+	        } else {
+	            if (symbol == null)
+	                symbol = lex();
+	            // read action for current state and first input
+	            action = table[state] && table[state][symbol];
+	        }
+
+	        // handle parse error
+	        _handle_error:
+	        if (typeof action === 'undefined' || !action.length || !action[0]) {
+
+	            if (!recovering) {
+	                // Report error
+	                expected = [];
+	                for (p in table[state]) if (this.terminals_[p] && p > 2) {
+	                    expected.push("'"+this.terminals_[p]+"'");
+	                }
+	                var errStr = '';
+	                if (this.lexer.showPosition) {
+	                    errStr = 'Parse error on line '+(yylineno+1)+":\n"+this.lexer.showPosition()+"\nExpecting "+expected.join(', ') + ", got '" + this.terminals_[symbol]+ "'";
+	                } else {
+	                    errStr = 'Parse error on line '+(yylineno+1)+": Unexpected " +
+	                                  (symbol == 1 /*EOF*/ ? "end of input" :
+	                                              ("'"+(this.terminals_[symbol] || symbol)+"'"));
+	                }
+	                this.parseError(errStr,
+	                    {text: this.lexer.match, token: this.terminals_[symbol] || symbol, line: this.lexer.yylineno, loc: yyloc, expected: expected});
+	            }
+
+	            // just recovered from another error
+	            if (recovering == 3) {
+	                if (symbol == EOF) {
+	                    throw new Error(errStr || 'Parsing halted.');
+	                }
+
+	                // discard current lookahead and grab another
+	                yyleng = this.lexer.yyleng;
+	                yytext = this.lexer.yytext;
+	                yylineno = this.lexer.yylineno;
+	                yyloc = this.lexer.yylloc;
+	                symbol = lex();
+	            }
+
+	            // try to recover from error
+	            while (1) {
+	                // check for error recovery rule in this state
+	                if ((TERROR.toString()) in table[state]) {
+	                    break;
+	                }
+	                if (state == 0) {
+	                    throw new Error(errStr || 'Parsing halted.');
+	                }
+	                popStack(1);
+	                state = stack[stack.length-1];
+	            }
+
+	            preErrorSymbol = symbol; // save the lookahead token
+	            symbol = TERROR;         // insert generic error symbol as new lookahead
+	            state = stack[stack.length-1];
+	            action = table[state] && table[state][TERROR];
+	            recovering = 3; // allow 3 real symbols to be shifted before reporting a new error
+	        }
+
+	        // this shouldn't happen, unless resolve defaults are off
+	        if (action[0] instanceof Array && action.length > 1) {
+	            throw new Error('Parse Error: multiple actions possible at state: '+state+', token: '+symbol);
+	        }
+
+	        switch (action[0]) {
+
+	            case 1: // shift
+	                //this.shiftCount++;
+
+	                stack.push(symbol);
+	                vstack.push(this.lexer.yytext);
+	                lstack.push(this.lexer.yylloc);
+	                stack.push(action[1]); // push state
+	                symbol = null;
+	                if (!preErrorSymbol) { // normal execution/no error
+	                    yyleng = this.lexer.yyleng;
+	                    yytext = this.lexer.yytext;
+	                    yylineno = this.lexer.yylineno;
+	                    yyloc = this.lexer.yylloc;
+	                    if (recovering > 0)
+	                        recovering--;
+	                } else { // error just occurred, resume old lookahead f/ before error
+	                    symbol = preErrorSymbol;
+	                    preErrorSymbol = null;
+	                }
+	                break;
+
+	            case 2: // reduce
+	                //this.reductionCount++;
+
+	                len = this.productions_[action[1]][1];
+
+	                // perform semantic action
+	                yyval.$ = vstack[vstack.length-len]; // default to $$ = $1
+	                // default location, uses first token for firsts, last for lasts
+	                yyval._$ = {
+	                    first_line: lstack[lstack.length-(len||1)].first_line,
+	                    last_line: lstack[lstack.length-1].last_line,
+	                    first_column: lstack[lstack.length-(len||1)].first_column,
+	                    last_column: lstack[lstack.length-1].last_column
+	                };
+	                r = this.performAction.call(yyval, yytext, yyleng, yylineno, this.yy, action[1], vstack, lstack);
+
+	                if (typeof r !== 'undefined') {
+	                    return r;
+	                }
+
+	                // pop off stack
+	                if (len) {
+	                    stack = stack.slice(0,-1*len*2);
+	                    vstack = vstack.slice(0, -1*len);
+	                    lstack = lstack.slice(0, -1*len);
+	                }
+
+	                stack.push(this.productions_[action[1]][0]);    // push nonterminal (reduce)
+	                vstack.push(yyval.$);
+	                lstack.push(yyval._$);
+	                // goto new state = table[STATE][NONTERMINAL]
+	                newState = table[stack[stack.length-2]][stack[stack.length-1]];
+	                stack.push(newState);
+	                break;
+
+	            case 3: // accept
+	                return true;
+	        }
+
+	    }
+
+	    return true;
+	}};
+	/* Jison generated lexer */
+	var lexer = (function(){
+	var lexer = ({EOF:1,
+	parseError:function parseError(str, hash) {
+	        if (this.yy.parseError) {
+	            this.yy.parseError(str, hash);
+	        } else {
+	            throw new Error(str);
+	        }
+	    },
+	setInput:function (input) {
+	        this._input = input;
+	        this._more = this._less = this.done = false;
+	        this.yylineno = this.yyleng = 0;
+	        this.yytext = this.matched = this.match = '';
+	        this.conditionStack = ['INITIAL'];
+	        this.yylloc = {first_line:1,first_column:0,last_line:1,last_column:0};
+	        return this;
+	    },
+	input:function () {
+	        var ch = this._input[0];
+	        this.yytext+=ch;
+	        this.yyleng++;
+	        this.match+=ch;
+	        this.matched+=ch;
+	        var lines = ch.match(/\n/);
+	        if (lines) this.yylineno++;
+	        this._input = this._input.slice(1);
+	        return ch;
+	    },
+	unput:function (ch) {
+	        this._input = ch + this._input;
+	        return this;
+	    },
+	more:function () {
+	        this._more = true;
+	        return this;
+	    },
+	less:function (n) {
+	        this._input = this.match.slice(n) + this._input;
+	    },
+	pastInput:function () {
+	        var past = this.matched.substr(0, this.matched.length - this.match.length);
+	        return (past.length > 20 ? '...':'') + past.substr(-20).replace(/\n/g, "");
+	    },
+	upcomingInput:function () {
+	        var next = this.match;
+	        if (next.length < 20) {
+	            next += this._input.substr(0, 20-next.length);
+	        }
+	        return (next.substr(0,20)+(next.length > 20 ? '...':'')).replace(/\n/g, "");
+	    },
+	showPosition:function () {
+	        var pre = this.pastInput();
+	        var c = new Array(pre.length + 1).join("-");
+	        return pre + this.upcomingInput() + "\n" + c+"^";
+	    },
+	next:function () {
+	        if (this.done) {
+	            return this.EOF;
+	        }
+	        if (!this._input) this.done = true;
+
+	        var token,
+	            match,
+	            tempMatch,
+	            index,
+	            col,
+	            lines;
+	        if (!this._more) {
+	            this.yytext = '';
+	            this.match = '';
+	        }
+	        var rules = this._currentRules();
+	        for (var i=0;i < rules.length; i++) {
+	            tempMatch = this._input.match(this.rules[rules[i]]);
+	            if (tempMatch && (!match || tempMatch[0].length > match[0].length)) {
+	                match = tempMatch;
+	                index = i;
+	                if (!this.options.flex) break;
+	            }
+	        }
+	        if (match) {
+	            lines = match[0].match(/\n.*/g);
+	            if (lines) this.yylineno += lines.length;
+	            this.yylloc = {first_line: this.yylloc.last_line,
+	                           last_line: this.yylineno+1,
+	                           first_column: this.yylloc.last_column,
+	                           last_column: lines ? lines[lines.length-1].length-1 : this.yylloc.last_column + match[0].length}
+	            this.yytext += match[0];
+	            this.match += match[0];
+	            this.yyleng = this.yytext.length;
+	            this._more = false;
+	            this._input = this._input.slice(match[0].length);
+	            this.matched += match[0];
+	            token = this.performAction.call(this, this.yy, this, rules[index],this.conditionStack[this.conditionStack.length-1]);
+	            if (this.done && this._input) this.done = false;
+	            if (token) return token;
+	            else return;
+	        }
+	        if (this._input === "") {
+	            return this.EOF;
+	        } else {
+	            this.parseError('Lexical error on line '+(this.yylineno+1)+'. Unrecognized text.\n'+this.showPosition(), 
+	                    {text: "", token: null, line: this.yylineno});
+	        }
+	    },
+	lex:function lex() {
+	        var r = this.next();
+	        if (typeof r !== 'undefined') {
+	            return r;
+	        } else {
+	            return this.lex();
+	        }
+	    },
+	begin:function begin(condition) {
+	        this.conditionStack.push(condition);
+	    },
+	popState:function popState() {
+	        return this.conditionStack.pop();
+	    },
+	_currentRules:function _currentRules() {
+	        return this.conditions[this.conditionStack[this.conditionStack.length-1]].rules;
+	    },
+	topState:function () {
+	        return this.conditionStack[this.conditionStack.length-2];
+	    },
+	pushState:function begin(condition) {
+	        this.begin(condition);
+	    }});
+	lexer.options = {};
+	lexer.performAction = function anonymous(yy,yy_,$avoiding_name_collisions,YY_START) {
+
+	var YYSTATE=YY_START
+	switch($avoiding_name_collisions) {
+	case 0:/* skip whitespace */
+	break;
+	case 1:return 6
+	break;
+	case 2:yy_.yytext = yy_.yytext.substr(1,yy_.yyleng-2); return 4
+	break;
+	case 3:return 17
+	break;
+	case 4:return 18
+	break;
+	case 5:return 23
+	break;
+	case 6:return 24
+	break;
+	case 7:return 22
+	break;
+	case 8:return 21
+	break;
+	case 9:return 10
+	break;
+	case 10:return 11
+	break;
+	case 11:return 8
+	break;
+	case 12:return 14
+	break;
+	case 13:return 'INVALID'
+	break;
+	}
 	};
+	lexer.rules = [/^(?:\s+)/,/^(?:(-?([0-9]|[1-9][0-9]+))(\.[0-9]+)?([eE][-+]?[0-9]+)?\b)/,/^(?:"(?:\\[\\"bfnrt/]|\\u[a-fA-F0-9]{4}|[^\\\0-\x09\x0a-\x1f"])*")/,/^(?:\{)/,/^(?:\})/,/^(?:\[)/,/^(?:\])/,/^(?:,)/,/^(?::)/,/^(?:true\b)/,/^(?:false\b)/,/^(?:null\b)/,/^(?:$)/,/^(?:.)/];
+	lexer.conditions = {"INITIAL":{"rules":[0,1,2,3,4,5,6,7,8,9,10,11,12,13],"inclusive":true}};
 
-	module.exports = History;
 
+	;
+	return lexer;})()
+	parser.lexer = lexer;
+	return parser;
+	})();
+	if (true) {
+	  exports.parser = jsonlint;
+	  exports.parse = jsonlint.parse.bind(jsonlint);
+	}
 
 /***/ },
 /* 6 */
 /***/ function(module, exports, __webpack_require__) {
+
+	var i18next = __webpack_require__(7);
 
 	/**
 	 * @constructor SearchBox
@@ -2436,7 +2515,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	  var divInput = document.createElement('div');
 	  this.dom.input = divInput;
 	  divInput.className = 'frame';
-	  divInput.title = 'Search fields and values';
+	  divInput.title = i18next.t('search_title');
 	  td.appendChild(divInput);
 
 	  // table to contain the text input and search button
@@ -2477,7 +2556,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	  tr.appendChild(td);
 
 	  var searchNext = document.createElement('button');
-	  searchNext.title = 'Next result (Enter)';
+	  searchNext.title = i18next.t('next_result');
 	  searchNext.className = 'next';
 	  searchNext.onclick = function () {
 	    searchBox.next();
@@ -2487,7 +2566,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	  tr.appendChild(td);
 
 	  var searchPrevious = document.createElement('button');
-	  searchPrevious.title = 'Previous result (Shift+Enter)';
+	  searchPrevious.title = i18next.t('prev_result');
 	  searchPrevious.className = 'previous';
 	  searchPrevious.onclick = function () {
 	    searchBox.previous();
@@ -2690,9 +2769,2295 @@ return /******/ (function(modules) { // webpackBootstrap
 /* 7 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var ContextMenu = __webpack_require__(10);
-	var appendNodeFactory = __webpack_require__(11);
-	var util = __webpack_require__(3);
+	// i18next, v1.10.1
+	// Copyright (c)2015 Jan Mühlemann (jamuhl).
+	// Distributed under MIT license
+	// http://i18next.com
+	(function(root) {
+
+	    // add indexOf to non ECMA-262 standard compliant browsers
+	    if (!Array.prototype.indexOf) {
+	        Array.prototype.indexOf = function (searchElement /*, fromIndex */ ) {
+	            "use strict";
+	            if (this == null) {
+	                throw new TypeError();
+	            }
+	            var t = Object(this);
+	            var len = t.length >>> 0;
+	            if (len === 0) {
+	                return -1;
+	            }
+	            var n = 0;
+	            if (arguments.length > 0) {
+	                n = Number(arguments[1]);
+	                if (n != n) { // shortcut for verifying if it's NaN
+	                    n = 0;
+	                } else if (n != 0 && n != Infinity && n != -Infinity) {
+	                    n = (n > 0 || -1) * Math.floor(Math.abs(n));
+	                }
+	            }
+	            if (n >= len) {
+	                return -1;
+	            }
+	            var k = n >= 0 ? n : Math.max(len - Math.abs(n), 0);
+	            for (; k < len; k++) {
+	                if (k in t && t[k] === searchElement) {
+	                    return k;
+	                }
+	            }
+	            return -1;
+	        }
+	    }
+	    
+	    // add lastIndexOf to non ECMA-262 standard compliant browsers
+	    if (!Array.prototype.lastIndexOf) {
+	        Array.prototype.lastIndexOf = function(searchElement /*, fromIndex*/) {
+	            "use strict";
+	            if (this == null) {
+	                throw new TypeError();
+	            }
+	            var t = Object(this);
+	            var len = t.length >>> 0;
+	            if (len === 0) {
+	                return -1;
+	            }
+	            var n = len;
+	            if (arguments.length > 1) {
+	                n = Number(arguments[1]);
+	                if (n != n) {
+	                    n = 0;
+	                } else if (n != 0 && n != (1 / 0) && n != -(1 / 0)) {
+	                    n = (n > 0 || -1) * Math.floor(Math.abs(n));
+	                }
+	            }
+	            var k = n >= 0 ? Math.min(n, len - 1) : len - Math.abs(n);
+	            for (; k >= 0; k--) {
+	                if (k in t && t[k] === searchElement) {
+	                    return k;
+	                }
+	            }
+	            return -1;
+	        };
+	    }
+	    
+	    // Add string trim for IE8.
+	    if (typeof String.prototype.trim !== 'function') {
+	        String.prototype.trim = function() {
+	            return this.replace(/^\s+|\s+$/g, ''); 
+	        }
+	    }
+
+	    var $ = root.jQuery || root.Zepto
+	      , i18n = {}
+	      , resStore = {}
+	      , currentLng
+	      , replacementCounter = 0
+	      , languages = []
+	      , initialized = false
+	      , sync = {}
+	      , conflictReference = null;
+
+
+
+	    // Export the i18next object for **CommonJS**. 
+	    // If we're not in CommonJS, add `i18n` to the
+	    // global object or to jquery.
+	    if (typeof module !== 'undefined' && module.exports) {
+	        module.exports = i18n;
+	    } else {
+	        if ($) {
+	            $.i18n = $.i18n || i18n;
+	        }
+	        
+	        if (root.i18n) {
+	        	conflictReference = root.i18n;
+	        }
+	        root.i18n = i18n;
+	    }
+	    sync = {
+	    
+	        load: function(lngs, options, cb) {
+	            if (options.useLocalStorage) {
+	                sync._loadLocal(lngs, options, function(err, store) {
+	                    var missingLngs = [];
+	                    for (var i = 0, len = lngs.length; i < len; i++) {
+	                        if (!store[lngs[i]]) missingLngs.push(lngs[i]);
+	                    }
+	    
+	                    if (missingLngs.length > 0) {
+	                        sync._fetch(missingLngs, options, function(err, fetched) {
+	                            f.extend(store, fetched);
+	                            sync._storeLocal(fetched);
+	    
+	                            cb(err, store);
+	                        });
+	                    } else {
+	                        cb(err, store);
+	                    }
+	                });
+	            } else {
+	                sync._fetch(lngs, options, function(err, store){
+	                    cb(err, store);
+	                });
+	            }
+	        },
+	    
+	        _loadLocal: function(lngs, options, cb) {
+	            var store = {}
+	              , nowMS = new Date().getTime();
+	    
+	            if(window.localStorage) {
+	    
+	                var todo = lngs.length;
+	    
+	                f.each(lngs, function(key, lng) {
+	                    var local = f.localStorage.getItem('res_' + lng);
+	    
+	                    if (local) {
+	                        local = JSON.parse(local);
+	    
+	                        if (local.i18nStamp && local.i18nStamp + options.localStorageExpirationTime > nowMS) {
+	                            store[lng] = local;
+	                        }
+	                    }
+	    
+	                    todo--; // wait for all done befor callback
+	                    if (todo === 0) cb(null, store);
+	                });
+	            }
+	        },
+	    
+	        _storeLocal: function(store) {
+	            if(window.localStorage) {
+	                for (var m in store) {
+	                    store[m].i18nStamp = new Date().getTime();
+	                    f.localStorage.setItem('res_' + m, JSON.stringify(store[m]));
+	                }
+	            }
+	            return;
+	        },
+	    
+	        _fetch: function(lngs, options, cb) {
+	            var ns = options.ns
+	              , store = {};
+	            
+	            if (!options.dynamicLoad) {
+	                var todo = ns.namespaces.length * lngs.length
+	                  , errors;
+	    
+	                // load each file individual
+	                f.each(ns.namespaces, function(nsIndex, nsValue) {
+	                    f.each(lngs, function(lngIndex, lngValue) {
+	                        
+	                        // Call this once our translation has returned.
+	                        var loadComplete = function(err, data) {
+	                            if (err) {
+	                                errors = errors || [];
+	                                errors.push(err);
+	                            }
+	                            store[lngValue] = store[lngValue] || {};
+	                            store[lngValue][nsValue] = data;
+	    
+	                            todo--; // wait for all done befor callback
+	                            if (todo === 0) cb(errors, store);
+	                        };
+	                        
+	                        if(typeof options.customLoad == 'function'){
+	                            // Use the specified custom callback.
+	                            options.customLoad(lngValue, nsValue, options, loadComplete);
+	                        } else {
+	                            //~ // Use our inbuilt sync.
+	                            sync._fetchOne(lngValue, nsValue, options, loadComplete);
+	                        }
+	                    });
+	                });
+	            } else {
+	                // Call this once our translation has returned.
+	                var loadComplete = function(err, data) {
+	                    cb(err, data);
+	                };
+	    
+	                if(typeof options.customLoad == 'function'){
+	                    // Use the specified custom callback.
+	                    options.customLoad(lngs, ns.namespaces, options, loadComplete);
+	                } else {
+	                    var url = applyReplacement(options.resGetPath, { lng: lngs.join('+'), ns: ns.namespaces.join('+') });
+	                    // load all needed stuff once
+	                    f.ajax({
+	                        url: url,
+	                        cache: options.cache,
+	                        success: function(data, status, xhr) {
+	                            f.log('loaded: ' + url);
+	                            loadComplete(null, data);
+	                        },
+	                        error : function(xhr, status, error) {
+	                            f.log('failed loading: ' + url);
+	                            loadComplete('failed loading resource.json error: ' + error);
+	                        },
+	                        dataType: "json",
+	                        async : options.getAsync,
+	                        timeout: options.ajaxTimeout
+	                    });
+	                }    
+	            }
+	        },
+	    
+	        _fetchOne: function(lng, ns, options, done) {
+	            var url = applyReplacement(options.resGetPath, { lng: lng, ns: ns });
+	            f.ajax({
+	                url: url,
+	                cache: options.cache,
+	                success: function(data, status, xhr) {
+	                    f.log('loaded: ' + url);
+	                    done(null, data);
+	                },
+	                error : function(xhr, status, error) {
+	                    if ((status && status == 200) || (xhr && xhr.status && xhr.status == 200)) {
+	                        // file loaded but invalid json, stop waste time !
+	                        f.error('There is a typo in: ' + url);
+	                    } else if ((status && status == 404) || (xhr && xhr.status && xhr.status == 404)) {
+	                        f.log('Does not exist: ' + url);
+	                    } else {
+	                        var theStatus = status ? status : ((xhr && xhr.status) ? xhr.status : null);
+	                        f.log(theStatus + ' when loading ' + url);
+	                    }
+	                    
+	                    done(error, {});
+	                },
+	                dataType: "json",
+	                async : options.getAsync,
+	                timeout: options.ajaxTimeout
+	            });
+	        },
+	    
+	        postMissing: function(lng, ns, key, defaultValue, lngs) {
+	            var payload = {};
+	            payload[key] = defaultValue;
+	    
+	            var urls = [];
+	    
+	            if (o.sendMissingTo === 'fallback' && o.fallbackLng[0] !== false) {
+	                for (var i = 0; i < o.fallbackLng.length; i++) {
+	                    urls.push({lng: o.fallbackLng[i], url: applyReplacement(o.resPostPath, { lng: o.fallbackLng[i], ns: ns })});
+	                }
+	            } else if (o.sendMissingTo === 'current' || (o.sendMissingTo === 'fallback' && o.fallbackLng[0] === false) ) {
+	                urls.push({lng: lng, url: applyReplacement(o.resPostPath, { lng: lng, ns: ns })});
+	            } else if (o.sendMissingTo === 'all') {
+	                for (var i = 0, l = lngs.length; i < l; i++) {
+	                    urls.push({lng: lngs[i], url: applyReplacement(o.resPostPath, { lng: lngs[i], ns: ns })});
+	                }
+	            }
+	    
+	            for (var y = 0, len = urls.length; y < len; y++) {
+	                var item = urls[y];
+	                f.ajax({
+	                    url: item.url,
+	                    type: o.sendType,
+	                    data: payload,
+	                    success: function(data, status, xhr) {
+	                        f.log('posted missing key \'' + key + '\' to: ' + item.url);
+	    
+	                        // add key to resStore
+	                        var keys = key.split('.');
+	                        var x = 0;
+	                        var value = resStore[item.lng][ns];
+	                        while (keys[x]) {
+	                            if (x === keys.length - 1) {
+	                                value = value[keys[x]] = defaultValue;
+	                            } else {
+	                                value = value[keys[x]] = value[keys[x]] || {};
+	                            }
+	                            x++;
+	                        }
+	                    },
+	                    error : function(xhr, status, error) {
+	                        f.log('failed posting missing key \'' + key + '\' to: ' + item.url);
+	                    },
+	                    dataType: "json",
+	                    async : o.postAsync,
+	                    timeout: o.ajaxTimeout
+	                });
+	            }
+	        },
+	    
+	        reload: reload
+	    };
+	    // defaults
+	    var o = {
+	        lng: undefined,
+	        load: 'all',
+	        preload: [],
+	        lowerCaseLng: false,
+	        returnObjectTrees: false,
+	        fallbackLng: ['dev'],
+	        fallbackNS: [],
+	        detectLngQS: 'setLng',
+	        detectLngFromLocalStorage: false,
+	        ns: {
+	            namespaces: ['translation'],
+	            defaultNs: 'translation'
+	        },
+	        fallbackOnNull: true,
+	        fallbackOnEmpty: false,
+	        fallbackToDefaultNS: false,
+	        showKeyIfEmpty: false,
+	        nsseparator: ':',
+	        keyseparator: '.',
+	        selectorAttr: 'data-i18n',
+	        debug: false,
+	    
+	        resGetPath: 'locales/__lng__/__ns__.json',
+	        resPostPath: 'locales/add/__lng__/__ns__',
+	    
+	        getAsync: true,
+	        postAsync: true,
+	    
+	        resStore: undefined,
+	        useLocalStorage: false,
+	        localStorageExpirationTime: 7*24*60*60*1000,
+	    
+	        dynamicLoad: false,
+	        sendMissing: false,
+	        sendMissingTo: 'fallback', // current | all
+	        sendType: 'POST',
+	    
+	        interpolationPrefix: '__',
+	        interpolationSuffix: '__',
+	        defaultVariables: false,
+	        reusePrefix: '$t(',
+	        reuseSuffix: ')',
+	        pluralSuffix: '_plural',
+	        pluralNotFound: ['plural_not_found', Math.random()].join(''),
+	        contextNotFound: ['context_not_found', Math.random()].join(''),
+	        escapeInterpolation: false,
+	        indefiniteSuffix: '_indefinite',
+	        indefiniteNotFound: ['indefinite_not_found', Math.random()].join(''),
+	    
+	        setJqueryExt: true,
+	        defaultValueFromContent: true,
+	        useDataAttrOptions: false,
+	        cookieExpirationTime: undefined,
+	        useCookie: true,
+	        cookieName: 'i18next',
+	        cookieDomain: undefined,
+	    
+	        objectTreeKeyHandler: undefined,
+	        postProcess: undefined,
+	        parseMissingKey: undefined,
+	        missingKeyHandler: sync.postMissing,
+	        ajaxTimeout: 0,
+	    
+	        shortcutFunction: 'sprintf' // or: defaultValue
+	    };
+	    function _extend(target, source) {
+	        if (!source || typeof source === 'function') {
+	            return target;
+	        }
+	    
+	        for (var attr in source) { target[attr] = source[attr]; }
+	        return target;
+	    }
+	    
+	    function _deepExtend(target, source) {
+	        for (var prop in source)
+	            if (prop in target)
+	                _deepExtend(target[prop], source[prop]);
+	            else
+	                target[prop] = source[prop];
+	        return target;
+	    }
+	    
+	    function _each(object, callback, args) {
+	        var name, i = 0,
+	            length = object.length,
+	            isObj = length === undefined || Object.prototype.toString.apply(object) !== '[object Array]' || typeof object === "function";
+	    
+	        if (args) {
+	            if (isObj) {
+	                for (name in object) {
+	                    if (callback.apply(object[name], args) === false) {
+	                        break;
+	                    }
+	                }
+	            } else {
+	                for ( ; i < length; ) {
+	                    if (callback.apply(object[i++], args) === false) {
+	                        break;
+	                    }
+	                }
+	            }
+	    
+	        // A special, fast, case for the most common use of each
+	        } else {
+	            if (isObj) {
+	                for (name in object) {
+	                    if (callback.call(object[name], name, object[name]) === false) {
+	                        break;
+	                    }
+	                }
+	            } else {
+	                for ( ; i < length; ) {
+	                    if (callback.call(object[i], i, object[i++]) === false) {
+	                        break;
+	                    }
+	                }
+	            }
+	        }
+	    
+	        return object;
+	    }
+	    
+	    var _entityMap = {
+	        "&": "&amp;",
+	        "<": "&lt;",
+	        ">": "&gt;",
+	        '"': '&quot;',
+	        "'": '&#39;',
+	        "/": '&#x2F;'
+	    };
+	    
+	    function _escape(data) {
+	        if (typeof data === 'string') {
+	            return data.replace(/[&<>"'\/]/g, function (s) {
+	                return _entityMap[s];
+	            });
+	        }else{
+	            return data;
+	        }
+	    }
+	    
+	    function _ajax(options) {
+	    
+	        // v0.5.0 of https://github.com/goloroden/http.js
+	        var getXhr = function (callback) {
+	            // Use the native XHR object if the browser supports it.
+	            if (window.XMLHttpRequest) {
+	                return callback(null, new XMLHttpRequest());
+	            } else if (window.ActiveXObject) {
+	                // In Internet Explorer check for ActiveX versions of the XHR object.
+	                try {
+	                    return callback(null, new ActiveXObject("Msxml2.XMLHTTP"));
+	                } catch (e) {
+	                    return callback(null, new ActiveXObject("Microsoft.XMLHTTP"));
+	                }
+	            }
+	    
+	            // If no XHR support was found, throw an error.
+	            return callback(new Error());
+	        };
+	    
+	        var encodeUsingUrlEncoding = function (data) {
+	            if(typeof data === 'string') {
+	                return data;
+	            }
+	    
+	            var result = [];
+	            for(var dataItem in data) {
+	                if(data.hasOwnProperty(dataItem)) {
+	                    result.push(encodeURIComponent(dataItem) + '=' + encodeURIComponent(data[dataItem]));
+	                }
+	            }
+	    
+	            return result.join('&');
+	        };
+	    
+	        var utf8 = function (text) {
+	            text = text.replace(/\r\n/g, '\n');
+	            var result = '';
+	    
+	            for(var i = 0; i < text.length; i++) {
+	                var c = text.charCodeAt(i);
+	    
+	                if(c < 128) {
+	                        result += String.fromCharCode(c);
+	                } else if((c > 127) && (c < 2048)) {
+	                        result += String.fromCharCode((c >> 6) | 192);
+	                        result += String.fromCharCode((c & 63) | 128);
+	                } else {
+	                        result += String.fromCharCode((c >> 12) | 224);
+	                        result += String.fromCharCode(((c >> 6) & 63) | 128);
+	                        result += String.fromCharCode((c & 63) | 128);
+	                }
+	            }
+	    
+	            return result;
+	        };
+	    
+	        var base64 = function (text) {
+	            var keyStr = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+	    
+	            text = utf8(text);
+	            var result = '',
+	                    chr1, chr2, chr3,
+	                    enc1, enc2, enc3, enc4,
+	                    i = 0;
+	    
+	            do {
+	                chr1 = text.charCodeAt(i++);
+	                chr2 = text.charCodeAt(i++);
+	                chr3 = text.charCodeAt(i++);
+	    
+	                enc1 = chr1 >> 2;
+	                enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+	                enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+	                enc4 = chr3 & 63;
+	    
+	                if(isNaN(chr2)) {
+	                    enc3 = enc4 = 64;
+	                } else if(isNaN(chr3)) {
+	                    enc4 = 64;
+	                }
+	    
+	                result +=
+	                    keyStr.charAt(enc1) +
+	                    keyStr.charAt(enc2) +
+	                    keyStr.charAt(enc3) +
+	                    keyStr.charAt(enc4);
+	                chr1 = chr2 = chr3 = '';
+	                enc1 = enc2 = enc3 = enc4 = '';
+	            } while(i < text.length);
+	    
+	            return result;
+	        };
+	    
+	        var mergeHeaders = function () {
+	            // Use the first header object as base.
+	            var result = arguments[0];
+	    
+	            // Iterate through the remaining header objects and add them.
+	            for(var i = 1; i < arguments.length; i++) {
+	                var currentHeaders = arguments[i];
+	                for(var header in currentHeaders) {
+	                    if(currentHeaders.hasOwnProperty(header)) {
+	                        result[header] = currentHeaders[header];
+	                    }
+	                }
+	            }
+	    
+	            // Return the merged headers.
+	            return result;
+	        };
+	    
+	        var ajax = function (method, url, options, callback) {
+	            // Adjust parameters.
+	            if(typeof options === 'function') {
+	                callback = options;
+	                options = {};
+	            }
+	    
+	            // Set default parameter values.
+	            options.cache = options.cache || false;
+	            options.data = options.data || {};
+	            options.headers = options.headers || {};
+	            options.jsonp = options.jsonp || false;
+	            options.async = options.async === undefined ? true : options.async;
+	    
+	            // Merge the various header objects.
+	            var headers = mergeHeaders({
+	                'accept': '*/*',
+	                'content-type': 'application/x-www-form-urlencoded;charset=UTF-8'
+	            }, ajax.headers, options.headers);
+	    
+	            // Encode the data according to the content-type.
+	            var payload;
+	            if (headers['content-type'] === 'application/json') {
+	                payload = JSON.stringify(options.data);
+	            } else {
+	                payload = encodeUsingUrlEncoding(options.data);
+	            }
+	    
+	            // Specially prepare GET requests: Setup the query string, handle caching and make a JSONP call
+	            // if neccessary.
+	            if(method === 'GET') {
+	                // Setup the query string.
+	                var queryString = [];
+	                if(payload) {
+	                    queryString.push(payload);
+	                    payload = null;
+	                }
+	    
+	                // Handle caching.
+	                if(!options.cache) {
+	                    queryString.push('_=' + (new Date()).getTime());
+	                }
+	    
+	                // If neccessary prepare the query string for a JSONP call.
+	                if(options.jsonp) {
+	                    queryString.push('callback=' + options.jsonp);
+	                    queryString.push('jsonp=' + options.jsonp);
+	                }
+	    
+	                // Merge the query string and attach it to the url.
+	                queryString = queryString.join('&');
+	                if (queryString.length > 1) {
+	                    if (url.indexOf('?') > -1) {
+	                        url += '&' + queryString;
+	                    } else {
+	                        url += '?' + queryString;
+	                    }
+	                }
+	    
+	                // Make a JSONP call if neccessary.
+	                if(options.jsonp) {
+	                    var head = document.getElementsByTagName('head')[0];
+	                    var script = document.createElement('script');
+	                    script.type = 'text/javascript';
+	                    script.src = url;
+	                    head.appendChild(script);
+	                    return;
+	                }
+	            }
+	    
+	            // Since we got here, it is no JSONP request, so make a normal XHR request.
+	            getXhr(function (err, xhr) {
+	                if(err) return callback(err);
+	    
+	                // Open the request.
+	                xhr.open(method, url, options.async);
+	    
+	                // Set the request headers.
+	                for(var header in headers) {
+	                    if(headers.hasOwnProperty(header)) {
+	                        xhr.setRequestHeader(header, headers[header]);
+	                    }
+	                }
+	    
+	                // Handle the request events.
+	                xhr.onreadystatechange = function () {
+	                    if(xhr.readyState === 4) {
+	                        var data = xhr.responseText || '';
+	    
+	                        // If no callback is given, return.
+	                        if(!callback) {
+	                            return;
+	                        }
+	    
+	                        // Return an object that provides access to the data as text and JSON.
+	                        callback(xhr.status, {
+	                            text: function () {
+	                                return data;
+	                            },
+	    
+	                            json: function () {
+	                                try {
+	                                    return JSON.parse(data)
+	                                } catch (e) {
+	                                    f.error('Can not parse JSON. URL: ' + url);
+	                                    return {};
+	                                }
+	                            }
+	                        });
+	                    }
+	                };
+	    
+	                // Actually send the XHR request.
+	                xhr.send(payload);
+	            });
+	        };
+	    
+	        // Define the external interface.
+	        var http = {
+	            authBasic: function (username, password) {
+	                ajax.headers['Authorization'] = 'Basic ' + base64(username + ':' + password);
+	            },
+	    
+	            connect: function (url, options, callback) {
+	                return ajax('CONNECT', url, options, callback);
+	            },
+	    
+	            del: function (url, options, callback) {
+	                return ajax('DELETE', url, options, callback);
+	            },
+	    
+	            get: function (url, options, callback) {
+	                return ajax('GET', url, options, callback);
+	            },
+	    
+	            head: function (url, options, callback) {
+	                return ajax('HEAD', url, options, callback);
+	            },
+	    
+	            headers: function (headers) {
+	                ajax.headers = headers || {};
+	            },
+	    
+	            isAllowed: function (url, verb, callback) {
+	                this.options(url, function (status, data) {
+	                    callback(data.text().indexOf(verb) !== -1);
+	                });
+	            },
+	    
+	            options: function (url, options, callback) {
+	                return ajax('OPTIONS', url, options, callback);
+	            },
+	    
+	            patch: function (url, options, callback) {
+	                return ajax('PATCH', url, options, callback);
+	            },
+	    
+	            post: function (url, options, callback) {
+	                return ajax('POST', url, options, callback);
+	            },
+	    
+	            put: function (url, options, callback) {
+	                return ajax('PUT', url, options, callback);
+	            },
+	    
+	            trace: function (url, options, callback) {
+	                return ajax('TRACE', url, options, callback);
+	            }
+	        };
+	    
+	    
+	        var methode = options.type ? options.type.toLowerCase() : 'get';
+	    
+	        http[methode](options.url, options, function (status, data) {
+	            // file: protocol always gives status code 0, so check for data
+	            if (status === 200 || (status === 0 && data.text())) {
+	                options.success(data.json(), status, null);
+	            } else {
+	                options.error(data.text(), status, null);
+	            }
+	        });
+	    }
+	    
+	    var _cookie = {
+	        create: function(name,value,minutes,domain) {
+	            var expires;
+	            if (minutes) {
+	                var date = new Date();
+	                date.setTime(date.getTime()+(minutes*60*1000));
+	                expires = "; expires="+date.toGMTString();
+	            }
+	            else expires = "";
+	            domain = (domain)? "domain="+domain+";" : "";
+	            document.cookie = name+"="+value+expires+";"+domain+"path=/";
+	        },
+	    
+	        read: function(name) {
+	            var nameEQ = name + "=";
+	            var ca = document.cookie.split(';');
+	            for(var i=0;i < ca.length;i++) {
+	                var c = ca[i];
+	                while (c.charAt(0)==' ') c = c.substring(1,c.length);
+	                if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length,c.length);
+	            }
+	            return null;
+	        },
+	    
+	        remove: function(name) {
+	            this.create(name,"",-1);
+	        }
+	    };
+	    
+	    var cookie_noop = {
+	        create: function(name,value,minutes,domain) {},
+	        read: function(name) { return null; },
+	        remove: function(name) {}
+	    };
+	    
+	    
+	    
+	    // move dependent functions to a container so that
+	    // they can be overriden easier in no jquery environment (node.js)
+	    var f = {
+	        extend: $ ? $.extend : _extend,
+	        deepExtend: _deepExtend,
+	        each: $ ? $.each : _each,
+	        ajax: $ ? $.ajax : (typeof document !== 'undefined' ? _ajax : function() {}),
+	        cookie: typeof document !== 'undefined' ? _cookie : cookie_noop,
+	        detectLanguage: detectLanguage,
+	        escape: _escape,
+	        log: function(str) {
+	            if (o.debug && typeof console !== "undefined") console.log(str);
+	        },
+	        error: function(str) {
+	            if (typeof console !== "undefined") console.error(str);
+	        },
+	        getCountyIndexOfLng: function(lng) {
+	            var lng_index = 0;
+	            if (lng === 'nb-NO' || lng === 'nn-NO' || lng === 'nb-no' || lng === 'nn-no') lng_index = 1;
+	            return lng_index;
+	        },
+	        toLanguages: function(lng, fallbackLng) {
+	            var log = this.log;
+	    
+	            fallbackLng = fallbackLng || o.fallbackLng;
+	            if (typeof fallbackLng === 'string')
+	                fallbackLng = [fallbackLng];
+	    
+	            function applyCase(l) {
+	                var ret = l;
+	    
+	                if (typeof l === 'string' && l.indexOf('-') > -1) {
+	                    var parts = l.split('-');
+	    
+	                    ret = o.lowerCaseLng ?
+	                        parts[0].toLowerCase() +  '-' + parts[1].toLowerCase() :
+	                        parts[0].toLowerCase() +  '-' + parts[1].toUpperCase();
+	                } else {
+	                    ret = o.lowerCaseLng ? l.toLowerCase() : l;
+	                }
+	    
+	                return ret;
+	            }
+	    
+	            var languages = [];
+	            var whitelist = o.lngWhitelist || false;
+	            var addLanguage = function(language){
+	              //reject langs not whitelisted
+	              if(!whitelist || whitelist.indexOf(language) > -1){
+	                languages.push(language);
+	              }else{
+	                log('rejecting non-whitelisted language: ' + language);
+	              }
+	            };
+	            if (typeof lng === 'string' && lng.indexOf('-') > -1) {
+	                var parts = lng.split('-');
+	    
+	                if (o.load !== 'unspecific') addLanguage(applyCase(lng));
+	                if (o.load !== 'current') addLanguage(applyCase(parts[this.getCountyIndexOfLng(lng)]));
+	            } else {
+	                addLanguage(applyCase(lng));
+	            }
+	    
+	            for (var i = 0; i < fallbackLng.length; i++) {
+	                if (languages.indexOf(fallbackLng[i]) === -1 && fallbackLng[i]) languages.push(applyCase(fallbackLng[i]));
+	            }
+	            return languages;
+	        },
+	        regexEscape: function(str) {
+	            return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
+	        },
+	        regexReplacementEscape: function(strOrFn) {
+	            if (typeof strOrFn === 'string') {
+	                return strOrFn.replace(/\$/g, "$$$$");
+	            } else {
+	                return strOrFn;
+	            }
+	        },
+	        localStorage: {
+	            setItem: function(key, value) {
+	                if (window.localStorage) {
+	                    try {
+	                        window.localStorage.setItem(key, value);
+	                    } catch (e) {
+	                        f.log('failed to set value for key "' + key + '" to localStorage.');
+	                    }
+	                }
+	            },
+	            getItem: function(key, value) {
+	                if (window.localStorage) {
+	                    try {
+	                        return window.localStorage.getItem(key, value);
+	                    } catch (e) {
+	                        f.log('failed to get value for key "' + key + '" from localStorage.');
+	                        return undefined;
+	                    }
+	                }
+	            }
+	        }
+	    };
+	    function init(options, cb) {
+	    
+	        if (typeof options === 'function') {
+	            cb = options;
+	            options = {};
+	        }
+	        options = options || {};
+	    
+	        // override defaults with passed in options
+	        f.extend(o, options);
+	        delete o.fixLng; /* passed in each time */
+	    
+	        // override functions: .log(), .detectLanguage(), etc
+	        if (o.functions) {
+	            delete o.functions;
+	            f.extend(f, options.functions);
+	        }
+	    
+	        // create namespace object if namespace is passed in as string
+	        if (typeof o.ns == 'string') {
+	            o.ns = { namespaces: [o.ns], defaultNs: o.ns};
+	        }
+	    
+	        // fallback namespaces
+	        if (typeof o.fallbackNS == 'string') {
+	            o.fallbackNS = [o.fallbackNS];
+	        }
+	    
+	        // fallback languages
+	        if (typeof o.fallbackLng == 'string' || typeof o.fallbackLng == 'boolean') {
+	            o.fallbackLng = [o.fallbackLng];
+	        }
+	    
+	        // escape prefix/suffix
+	        o.interpolationPrefixEscaped = f.regexEscape(o.interpolationPrefix);
+	        o.interpolationSuffixEscaped = f.regexEscape(o.interpolationSuffix);
+	    
+	        if (!o.lng) o.lng = f.detectLanguage();
+	    
+	        languages = f.toLanguages(o.lng);
+	        currentLng = languages[0];
+	        f.log('currentLng set to: ' + currentLng);
+	    
+	        if (o.useCookie && f.cookie.read(o.cookieName) !== currentLng){ //cookie is unset or invalid
+	            f.cookie.create(o.cookieName, currentLng, o.cookieExpirationTime, o.cookieDomain);
+	        }
+	        if (o.detectLngFromLocalStorage && typeof document !== 'undefined' && window.localStorage) {
+	            f.localStorage.setItem('i18next_lng', currentLng);
+	        }
+	    
+	        var lngTranslate = translate;
+	        if (options.fixLng) {
+	            lngTranslate = function(key, options) {
+	                options = options || {};
+	                options.lng = options.lng || lngTranslate.lng;
+	                return translate(key, options);
+	            };
+	            lngTranslate.lng = currentLng;
+	        }
+	    
+	        pluralExtensions.setCurrentLng(currentLng);
+	    
+	        // add JQuery extensions
+	        if ($ && o.setJqueryExt) {
+	            addJqueryFunct && addJqueryFunct();
+	        } else {
+	           addJqueryLikeFunctionality && addJqueryLikeFunctionality();
+	        }
+	    
+	        // jQuery deferred
+	        var deferred;
+	        if ($ && $.Deferred) {
+	            deferred = $.Deferred();
+	        }
+	    
+	        // return immidiatly if res are passed in
+	        if (o.resStore) {
+	            resStore = o.resStore;
+	            initialized = true;
+	            if (cb) cb(lngTranslate);
+	            if (deferred) deferred.resolve(lngTranslate);
+	            if (deferred) return deferred.promise();
+	            return;
+	        }
+	    
+	        // languages to load
+	        var lngsToLoad = f.toLanguages(o.lng);
+	        if (typeof o.preload === 'string') o.preload = [o.preload];
+	        for (var i = 0, l = o.preload.length; i < l; i++) {
+	            var pres = f.toLanguages(o.preload[i]);
+	            for (var y = 0, len = pres.length; y < len; y++) {
+	                if (lngsToLoad.indexOf(pres[y]) < 0) {
+	                    lngsToLoad.push(pres[y]);
+	                }
+	            }
+	        }
+	    
+	        // else load them
+	        i18n.sync.load(lngsToLoad, o, function(err, store) {
+	            resStore = store;
+	            initialized = true;
+	    
+	            if (cb) cb(err, lngTranslate);
+	            if (deferred) (!err ? deferred.resolve : deferred.reject)(err || lngTranslate);
+	        });
+	    
+	        if (deferred) return deferred.promise();
+	    }
+	    
+	    function isInitialized() {
+	        return initialized;
+	    }
+	    function preload(lngs, cb) {
+	        if (typeof lngs === 'string') lngs = [lngs];
+	        for (var i = 0, l = lngs.length; i < l; i++) {
+	            if (o.preload.indexOf(lngs[i]) < 0) {
+	                o.preload.push(lngs[i]);
+	            }
+	        }
+	        return init(cb);
+	    }
+	    
+	    function addResourceBundle(lng, ns, resources, deep) {
+	        if (typeof ns !== 'string') {
+	            resources = ns;
+	            ns = o.ns.defaultNs;
+	        } else if (o.ns.namespaces.indexOf(ns) < 0) {
+	            o.ns.namespaces.push(ns);
+	        }
+	    
+	        resStore[lng] = resStore[lng] || {};
+	        resStore[lng][ns] = resStore[lng][ns] || {};
+	    
+	        if (deep) {
+	            f.deepExtend(resStore[lng][ns], resources);
+	        } else {
+	            f.extend(resStore[lng][ns], resources);
+	        }
+	        if (o.useLocalStorage) {
+	            sync._storeLocal(resStore);
+	        }
+	    }
+	    
+	    function hasResourceBundle(lng, ns) {
+	        if (typeof ns !== 'string') {
+	            ns = o.ns.defaultNs;
+	        }
+	    
+	        resStore[lng] = resStore[lng] || {};
+	        var res = resStore[lng][ns] || {};
+	    
+	        var hasValues = false;
+	        for(var prop in res) {
+	            if (res.hasOwnProperty(prop)) {
+	                hasValues = true;
+	            }
+	        }
+	    
+	        return hasValues;
+	    }
+	    
+	    function getResourceBundle(lng, ns) {
+	        if (typeof ns !== 'string') {
+	            ns = o.ns.defaultNs;
+	        }
+	    
+	        resStore[lng] = resStore[lng] || {};
+	        return f.extend({}, resStore[lng][ns]);
+	    }
+	    
+	    function removeResourceBundle(lng, ns) {
+	        if (typeof ns !== 'string') {
+	            ns = o.ns.defaultNs;
+	        }
+	    
+	        resStore[lng] = resStore[lng] || {};
+	        resStore[lng][ns] = {};
+	        if (o.useLocalStorage) {
+	            sync._storeLocal(resStore);
+	        }
+	    }
+	    
+	    function addResource(lng, ns, key, value) {
+	        if (typeof ns !== 'string') {
+	            resource = ns;
+	            ns = o.ns.defaultNs;
+	        } else if (o.ns.namespaces.indexOf(ns) < 0) {
+	            o.ns.namespaces.push(ns);
+	        }
+	    
+	        resStore[lng] = resStore[lng] || {};
+	        resStore[lng][ns] = resStore[lng][ns] || {};
+	    
+	        var keys = key.split(o.keyseparator);
+	        var x = 0;
+	        var node = resStore[lng][ns];
+	        var origRef = node;
+	    
+	        while (keys[x]) {
+	            if (x == keys.length - 1)
+	                node[keys[x]] = value;
+	            else {
+	                if (node[keys[x]] == null)
+	                    node[keys[x]] = {};
+	    
+	                node = node[keys[x]];
+	            }
+	            x++;
+	        }
+	        if (o.useLocalStorage) {
+	            sync._storeLocal(resStore);
+	        }
+	    }
+	    
+	    function addResources(lng, ns, resources) {
+	        if (typeof ns !== 'string') {
+	            resource = ns;
+	            ns = o.ns.defaultNs;
+	        } else if (o.ns.namespaces.indexOf(ns) < 0) {
+	            o.ns.namespaces.push(ns);
+	        }
+	    
+	        for (var m in resources) {
+	            if (typeof resources[m] === 'string') addResource(lng, ns, m, resources[m]);
+	        }
+	    }
+	    
+	    function setDefaultNamespace(ns) {
+	        o.ns.defaultNs = ns;
+	    }
+	    
+	    function loadNamespace(namespace, cb) {
+	        loadNamespaces([namespace], cb);
+	    }
+	    
+	    function loadNamespaces(namespaces, cb) {
+	        var opts = {
+	            dynamicLoad: o.dynamicLoad,
+	            resGetPath: o.resGetPath,
+	            getAsync: o.getAsync,
+	            customLoad: o.customLoad,
+	            ns: { namespaces: namespaces, defaultNs: ''} /* new namespaces to load */
+	        };
+	    
+	        // languages to load
+	        var lngsToLoad = f.toLanguages(o.lng);
+	        if (typeof o.preload === 'string') o.preload = [o.preload];
+	        for (var i = 0, l = o.preload.length; i < l; i++) {
+	            var pres = f.toLanguages(o.preload[i]);
+	            for (var y = 0, len = pres.length; y < len; y++) {
+	                if (lngsToLoad.indexOf(pres[y]) < 0) {
+	                    lngsToLoad.push(pres[y]);
+	                }
+	            }
+	        }
+	    
+	        // check if we have to load
+	        var lngNeedLoad = [];
+	        for (var a = 0, lenA = lngsToLoad.length; a < lenA; a++) {
+	            var needLoad = false;
+	            var resSet = resStore[lngsToLoad[a]];
+	            if (resSet) {
+	                for (var b = 0, lenB = namespaces.length; b < lenB; b++) {
+	                    if (!resSet[namespaces[b]]) needLoad = true;
+	                }
+	            } else {
+	                needLoad = true;
+	            }
+	    
+	            if (needLoad) lngNeedLoad.push(lngsToLoad[a]);
+	        }
+	    
+	        if (lngNeedLoad.length) {
+	            i18n.sync._fetch(lngNeedLoad, opts, function(err, store) {
+	                var todo = namespaces.length * lngNeedLoad.length;
+	    
+	                // load each file individual
+	                f.each(namespaces, function(nsIndex, nsValue) {
+	    
+	                    // append namespace to namespace array
+	                    if (o.ns.namespaces.indexOf(nsValue) < 0) {
+	                        o.ns.namespaces.push(nsValue);
+	                    }
+	    
+	                    f.each(lngNeedLoad, function(lngIndex, lngValue) {
+	                        resStore[lngValue] = resStore[lngValue] || {};
+	                        resStore[lngValue][nsValue] = store[lngValue][nsValue];
+	    
+	                        todo--; // wait for all done befor callback
+	                        if (todo === 0 && cb) {
+	                            if (o.useLocalStorage) i18n.sync._storeLocal(resStore);
+	                            cb();
+	                        }
+	                    });
+	                });
+	            });
+	        } else {
+	            if (cb) cb();
+	        }
+	    }
+	    
+	    function setLng(lng, options, cb) {
+	        if (typeof options === 'function') {
+	            cb = options;
+	            options = {};
+	        } else if (!options) {
+	            options = {};
+	        }
+	    
+	        options.lng = lng;
+	        return init(options, cb);
+	    }
+	    
+	    function lng() {
+	        return currentLng;
+	    }
+	    
+	    function reload(cb) {
+	        resStore = {};
+	        setLng(currentLng, cb);
+	    }
+	    
+	    function noConflict() {
+	        
+	        window.i18next = window.i18n;
+	    
+	        if (conflictReference) {
+	            window.i18n = conflictReference;
+	        } else {
+	            delete window.i18n;
+	        }
+	    }
+	    function addJqueryFunct() {
+	        // $.t shortcut
+	        $.t = $.t || translate;
+	    
+	        function parse(ele, key, options) {
+	            if (key.length === 0) return;
+	    
+	            var attr = 'text';
+	    
+	            if (key.indexOf('[') === 0) {
+	                var parts = key.split(']');
+	                key = parts[1];
+	                attr = parts[0].substr(1, parts[0].length-1);
+	            }
+	    
+	            if (key.indexOf(';') === key.length-1) {
+	                key = key.substr(0, key.length-2);
+	            }
+	    
+	            var optionsToUse;
+	            if (attr === 'html') {
+	                optionsToUse = o.defaultValueFromContent ? $.extend({ defaultValue: ele.html() }, options) : options;
+	                ele.html($.t(key, optionsToUse));
+	            } else if (attr === 'text') {
+	                optionsToUse = o.defaultValueFromContent ? $.extend({ defaultValue: ele.text() }, options) : options;
+	                ele.text($.t(key, optionsToUse));
+	            } else if (attr === 'prepend') {
+	                optionsToUse = o.defaultValueFromContent ? $.extend({ defaultValue: ele.html() }, options) : options;
+	                ele.prepend($.t(key, optionsToUse));
+	            } else if (attr === 'append') {
+	                optionsToUse = o.defaultValueFromContent ? $.extend({ defaultValue: ele.html() }, options) : options;
+	                ele.append($.t(key, optionsToUse));
+	            } else if (attr.indexOf("data-") === 0) {
+	                var dataAttr = attr.substr(("data-").length);
+	                optionsToUse = o.defaultValueFromContent ? $.extend({ defaultValue: ele.data(dataAttr) }, options) : options;
+	                var translated = $.t(key, optionsToUse);
+	                //we change into the data cache
+	                ele.data(dataAttr, translated);
+	                //we change into the dom
+	                ele.attr(attr, translated);
+	            } else {
+	                optionsToUse = o.defaultValueFromContent ? $.extend({ defaultValue: ele.attr(attr) }, options) : options;
+	                ele.attr(attr, $.t(key, optionsToUse));
+	            }
+	        }
+	    
+	        function localize(ele, options) {
+	            var key = ele.attr(o.selectorAttr);
+	            if (!key && typeof key !== 'undefined' && key !== false) key = ele.text() || ele.val();
+	            if (!key) return;
+	    
+	            var target = ele
+	              , targetSelector = ele.data("i18n-target");
+	            if (targetSelector) {
+	                target = ele.find(targetSelector) || ele;
+	            }
+	    
+	            if (!options && o.useDataAttrOptions === true) {
+	                options = ele.data("i18n-options");
+	            }
+	            options = options || {};
+	    
+	            if (key.indexOf(';') >= 0) {
+	                var keys = key.split(';');
+	    
+	                $.each(keys, function(m, k) {
+	                    if (k !== '') parse(target, k, options);
+	                });
+	    
+	            } else {
+	                parse(target, key, options);
+	            }
+	    
+	            if (o.useDataAttrOptions === true) ele.data("i18n-options", options);
+	        }
+	    
+	        // fn
+	        $.fn.i18n = function (options) {
+	            return this.each(function() {
+	                // localize element itself
+	                localize($(this), options);
+	    
+	                // localize childs
+	                var elements =  $(this).find('[' + o.selectorAttr + ']');
+	                elements.each(function() { 
+	                    localize($(this), options);
+	                });
+	            });
+	        };
+	    }
+	    function addJqueryLikeFunctionality() {
+	    
+	        function parse(ele, key, options) {
+	            if (key.length === 0) return;
+	    
+	            var attr = 'text';
+	    
+	            if (key.indexOf('[') === 0) {
+	                var parts = key.split(']');
+	                key = parts[1];
+	                attr = parts[0].substr(1, parts[0].length-1);
+	            }
+	    
+	            if (key.indexOf(';') === key.length-1) {
+	                key = key.substr(0, key.length-2);
+	            }
+	    
+	            if (attr === 'html') {
+	                ele.innerHTML = translate(key, options);
+	            } else if (attr === 'text') {
+	                ele.textContent = translate(key, options);
+	            } else if (attr === 'prepend') {
+	                ele.insertAdjacentHTML(translate(key, options), 'afterbegin');
+	            } else if (attr === 'append') {
+	                ele.insertAdjacentHTML(translate(key, options), 'beforeend');
+	            } else {
+	                ele.setAttribute(attr, translate(key, options));
+	            }
+	        }
+	    
+	        function localize(ele, options) {
+	            var key = ele.getAttribute(o.selectorAttr);
+	            if (!key && typeof key !== 'undefined' && key !== false) key = ele.textContent || ele.value;
+	            if (!key) return;
+	    
+	            var target = ele
+	              , targetSelector = ele.getAttribute("i18n-target");
+	            if (targetSelector) {
+	                target = ele.querySelector(targetSelector) || ele;
+	            }
+	            
+	            if (key.indexOf(';') >= 0) {
+	                var keys = key.split(';'), index = 0, length = keys.length;
+	                
+	                for ( ; index < length; index++) {
+	                    if (keys[index] !== '') parse(target, keys[index], options);
+	                }
+	    
+	            } else {
+	                parse(target, key, options);
+	            }
+	        }
+	    
+	        // fn
+	        i18n.translateObject = function (object, options) {
+	            // localize childs
+	            var elements =  object.querySelectorAll('[' + o.selectorAttr + ']');
+	            var index = 0, length = elements.length;
+	            for ( ; index < length; index++) {
+	                localize(elements[index], options);
+	            }
+	        };
+	    }
+	    function applyReplacement(str, replacementHash, nestedKey, options) {
+	        if (!str) return str;
+	    
+	        options = options || replacementHash; // first call uses replacement hash combined with options
+	        if (str.indexOf(options.interpolationPrefix || o.interpolationPrefix) < 0) return str;
+	    
+	        var prefix = options.interpolationPrefix ? f.regexEscape(options.interpolationPrefix) : o.interpolationPrefixEscaped
+	          , suffix = options.interpolationSuffix ? f.regexEscape(options.interpolationSuffix) : o.interpolationSuffixEscaped
+	          , unEscapingSuffix = 'HTML'+suffix;
+	    
+	        var hash = replacementHash.replace && typeof replacementHash.replace === 'object' ? replacementHash.replace : replacementHash;
+	        f.each(hash, function(key, value) {
+	            var nextKey = nestedKey ? nestedKey + o.keyseparator + key : key;
+	            if (typeof value === 'object' && value !== null) {
+	                str = applyReplacement(str, value, nextKey, options);
+	            } else {
+	                if (options.escapeInterpolation || o.escapeInterpolation) {
+	                    str = str.replace(new RegExp([prefix, nextKey, unEscapingSuffix].join(''), 'g'), f.regexReplacementEscape(value));
+	                    str = str.replace(new RegExp([prefix, nextKey, suffix].join(''), 'g'), f.regexReplacementEscape(f.escape(value)));
+	                } else {
+	                    str = str.replace(new RegExp([prefix, nextKey, suffix].join(''), 'g'), f.regexReplacementEscape(value));
+	                }
+	                // str = options.escapeInterpolation;
+	            }
+	        });
+	        return str;
+	    }
+	    
+	    // append it to functions
+	    f.applyReplacement = applyReplacement;
+	    
+	    function applyReuse(translated, options) {
+	        var comma = ',';
+	        var options_open = '{';
+	        var options_close = '}';
+	    
+	        var opts = f.extend({}, options);
+	        delete opts.postProcess;
+	    
+	        while (translated.indexOf(o.reusePrefix) != -1) {
+	            replacementCounter++;
+	            if (replacementCounter > o.maxRecursion) { break; } // safety net for too much recursion
+	            var index_of_opening = translated.lastIndexOf(o.reusePrefix);
+	            var index_of_end_of_closing = translated.indexOf(o.reuseSuffix, index_of_opening) + o.reuseSuffix.length;
+	            var token = translated.substring(index_of_opening, index_of_end_of_closing);
+	            var token_without_symbols = token.replace(o.reusePrefix, '').replace(o.reuseSuffix, '');
+	    
+	            if (index_of_end_of_closing <= index_of_opening) {
+	                f.error('there is an missing closing in following translation value', translated);
+	                return '';
+	            }
+	    
+	            if (token_without_symbols.indexOf(comma) != -1) {
+	                var index_of_token_end_of_closing = token_without_symbols.indexOf(comma);
+	                if (token_without_symbols.indexOf(options_open, index_of_token_end_of_closing) != -1 && token_without_symbols.indexOf(options_close, index_of_token_end_of_closing) != -1) {
+	                    var index_of_opts_opening = token_without_symbols.indexOf(options_open, index_of_token_end_of_closing);
+	                    var index_of_opts_end_of_closing = token_without_symbols.indexOf(options_close, index_of_opts_opening) + options_close.length;
+	                    try {
+	                        opts = f.extend(opts, JSON.parse(token_without_symbols.substring(index_of_opts_opening, index_of_opts_end_of_closing)));
+	                        token_without_symbols = token_without_symbols.substring(0, index_of_token_end_of_closing);
+	                    } catch (e) {
+	                    }
+	                }
+	            }
+	    
+	            var translated_token = _translate(token_without_symbols, opts);
+	            translated = translated.replace(token, f.regexReplacementEscape(translated_token));
+	        }
+	        return translated;
+	    }
+	    
+	    function hasContext(options) {
+	        return (options.context && (typeof options.context == 'string' || typeof options.context == 'number'));
+	    }
+	    
+	    function needsPlural(options, lng) {
+	        return (options.count !== undefined && typeof options.count != 'string'/* && pluralExtensions.needsPlural(lng, options.count)*/);
+	    }
+	    
+	    function needsIndefiniteArticle(options) {
+	        return (options.indefinite_article !== undefined && typeof options.indefinite_article != 'string' && options.indefinite_article);
+	    }
+	    
+	    function exists(key, options) {
+	        options = options || {};
+	    
+	        var notFound = _getDefaultValue(key, options)
+	            , found = _find(key, options);
+	    
+	        return found !== undefined || found === notFound;
+	    }
+	    
+	    function translate(key, options) {
+	        options = options || {};
+	    
+	        if (!initialized) {
+	            f.log('i18next not finished initialization. you might have called t function before loading resources finished.')
+	            return options.defaultValue || '';
+	        };
+	        replacementCounter = 0;
+	        return _translate.apply(null, arguments);
+	    }
+	    
+	    function _getDefaultValue(key, options) {
+	        return (options.defaultValue !== undefined) ? options.defaultValue : key;
+	    }
+	    
+	    function _injectSprintfProcessor() {
+	    
+	        var values = [];
+	    
+	        // mh: build array from second argument onwards
+	        for (var i = 1; i < arguments.length; i++) {
+	            values.push(arguments[i]);
+	        }
+	    
+	        return {
+	            postProcess: 'sprintf',
+	            sprintf:     values
+	        };
+	    }
+	    
+	    function _translate(potentialKeys, options) {
+	        if (options && typeof options !== 'object') {
+	            if (o.shortcutFunction === 'sprintf') {
+	                // mh: gettext like sprintf syntax found, automatically create sprintf processor
+	                options = _injectSprintfProcessor.apply(null, arguments);
+	            } else if (o.shortcutFunction === 'defaultValue') {
+	                options = {
+	                    defaultValue: options
+	                }
+	            }
+	        } else {
+	            options = options || {};
+	        }
+	    
+	        if (typeof o.defaultVariables === 'object') {
+	            options = f.extend({}, o.defaultVariables, options);
+	        }
+	    
+	        if (potentialKeys === undefined || potentialKeys === null || potentialKeys === '') return '';
+	    
+	        if (typeof potentialKeys === 'number') {
+	            potentialKeys = String(potentialKeys);
+	        }
+	    
+	        if (typeof potentialKeys === 'string') {
+	            potentialKeys = [potentialKeys];
+	        }
+	    
+	        var key = potentialKeys[0];
+	    
+	        if (potentialKeys.length > 1) {
+	            for (var i = 0; i < potentialKeys.length; i++) {
+	                key = potentialKeys[i];
+	                if (exists(key, options)) {
+	                    break;
+	                }
+	            }
+	        }
+	    
+	        var notFound = _getDefaultValue(key, options)
+	            , found = _find(key, options)
+	            , lngs = options.lng ? f.toLanguages(options.lng, options.fallbackLng) : languages
+	            , ns = options.ns || o.ns.defaultNs
+	            , parts;
+	    
+	        // split ns and key
+	        if (key.indexOf(o.nsseparator) > -1) {
+	            parts = key.split(o.nsseparator);
+	            ns = parts[0];
+	            key = parts[1];
+	        }
+	    
+	        if (found === undefined && o.sendMissing && typeof o.missingKeyHandler === 'function') {
+	            if (options.lng) {
+	                o.missingKeyHandler(lngs[0], ns, key, notFound, lngs);
+	            } else {
+	                o.missingKeyHandler(o.lng, ns, key, notFound, lngs);
+	            }
+	        }
+	    
+	        var postProcessorsToApply;
+	        if (typeof o.postProcess === 'string' && o.postProcess !== '') {
+	            postProcessorsToApply = [o.postProcess];
+	        } else if (typeof o.postProcess === 'array' || typeof o.postProcess === 'object') {
+	            postProcessorsToApply = o.postProcess;
+	        } else {
+	            postProcessorsToApply = [];
+	        }
+	    
+	        if (typeof options.postProcess === 'string' && options.postProcess !== '') {
+	            postProcessorsToApply = postProcessorsToApply.concat([options.postProcess]);
+	        } else if (typeof options.postProcess === 'array' || typeof options.postProcess === 'object') {
+	            postProcessorsToApply = postProcessorsToApply.concat(options.postProcess);
+	        }
+	    
+	        if (found !== undefined && postProcessorsToApply.length) {
+	            postProcessorsToApply.forEach(function(postProcessor) {
+	                if (postProcessors[postProcessor]) {
+	                    found = postProcessors[postProcessor](found, key, options);
+	                }
+	            });
+	        }
+	    
+	        // process notFound if function exists
+	        var splitNotFound = notFound;
+	        if (notFound.indexOf(o.nsseparator) > -1) {
+	            parts = notFound.split(o.nsseparator);
+	            splitNotFound = parts[1];
+	        }
+	        if (splitNotFound === key && o.parseMissingKey) {
+	            notFound = o.parseMissingKey(notFound);
+	        }
+	    
+	        if (found === undefined) {
+	            notFound = applyReplacement(notFound, options);
+	            notFound = applyReuse(notFound, options);
+	    
+	            if (postProcessorsToApply.length) {
+	                var val = _getDefaultValue(key, options);
+	                postProcessorsToApply.forEach(function(postProcessor) {
+	                    if (postProcessors[postProcessor]) {
+	                        found = postProcessors[postProcessor](val, key, options);
+	                    }
+	                });
+	            }
+	        }
+	    
+	        return (found !== undefined) ? found : notFound;
+	    }
+	    
+	    function _find(key, options) {
+	        options = options || {};
+	    
+	        var optionWithoutCount, translated
+	            , notFound = _getDefaultValue(key, options)
+	            , lngs = languages;
+	    
+	        if (!resStore) { return notFound; } // no resStore to translate from
+	    
+	        // CI mode
+	        if (lngs[0].toLowerCase() === 'cimode') return notFound;
+	    
+	        // passed in lng
+	        if (options.lngs) lngs = options.lngs;
+	        if (options.lng) {
+	            lngs = f.toLanguages(options.lng, options.fallbackLng);
+	    
+	            if (!resStore[lngs[0]]) {
+	                var oldAsync = o.getAsync;
+	                o.getAsync = false;
+	    
+	                i18n.sync.load(lngs, o, function(err, store) {
+	                    f.extend(resStore, store);
+	                    o.getAsync = oldAsync;
+	                });
+	            }
+	        }
+	    
+	        var ns = options.ns || o.ns.defaultNs;
+	        if (key.indexOf(o.nsseparator) > -1) {
+	            var parts = key.split(o.nsseparator);
+	            ns = parts[0];
+	            key = parts[1];
+	        }
+	    
+	        if (hasContext(options)) {
+	            optionWithoutCount = f.extend({}, options);
+	            delete optionWithoutCount.context;
+	            optionWithoutCount.defaultValue = o.contextNotFound;
+	    
+	            var contextKey = ns + o.nsseparator + key + '_' + options.context;
+	    
+	            translated = translate(contextKey, optionWithoutCount);
+	            if (translated != o.contextNotFound) {
+	                return applyReplacement(translated, { context: options.context }); // apply replacement for context only
+	            } // else continue translation with original/nonContext key
+	        }
+	    
+	        if (needsPlural(options, lngs[0])) {
+	            optionWithoutCount = f.extend({ lngs: [lngs[0]]}, options);
+	            delete optionWithoutCount.count;
+	            optionWithoutCount._origLng = optionWithoutCount._origLng || optionWithoutCount.lng || lngs[0];
+	            delete optionWithoutCount.lng;
+	            optionWithoutCount.defaultValue = o.pluralNotFound;
+	    
+	            var pluralKey;
+	            if (!pluralExtensions.needsPlural(lngs[0], options.count)) {
+	                pluralKey = ns + o.nsseparator + key;
+	            } else {
+	                pluralKey = ns + o.nsseparator + key + o.pluralSuffix;
+	                var pluralExtension = pluralExtensions.get(lngs[0], options.count);
+	                if (pluralExtension >= 0) {
+	                    pluralKey = pluralKey + '_' + pluralExtension;
+	                } else if (pluralExtension === 1) {
+	                    pluralKey = ns + o.nsseparator + key; // singular
+	                }
+	            }
+	    
+	            translated = translate(pluralKey, optionWithoutCount);
+	    
+	            if (translated != o.pluralNotFound) {
+	                return applyReplacement(translated, {
+	                    count: options.count,
+	                    interpolationPrefix: options.interpolationPrefix,
+	                    interpolationSuffix: options.interpolationSuffix
+	                }); // apply replacement for count only
+	            } else if (lngs.length > 1) {
+	                // remove failed lng
+	                var clone = lngs.slice();
+	                clone.shift();
+	                options = f.extend(options, { lngs: clone });
+	                options._origLng = optionWithoutCount._origLng;
+	                delete options.lng;
+	                // retry with fallbacks
+	                translated = translate(ns + o.nsseparator + key, options);
+	                if (translated != o.pluralNotFound) return translated;
+	            } else {
+	                optionWithoutCount.lng = optionWithoutCount._origLng;
+	                delete optionWithoutCount._origLng;
+	                translated = translate(ns + o.nsseparator + key, optionWithoutCount);
+	    
+	                return applyReplacement(translated, {
+	                    count: options.count,
+	                    interpolationPrefix: options.interpolationPrefix,
+	                    interpolationSuffix: options.interpolationSuffix
+	                });
+	            }
+	        }
+	    
+	        if (needsIndefiniteArticle(options)) {
+	            var optionsWithoutIndef = f.extend({}, options);
+	            delete optionsWithoutIndef.indefinite_article;
+	            optionsWithoutIndef.defaultValue = o.indefiniteNotFound;
+	            // If we don't have a count, we want the indefinite, if we do have a count, and needsPlural is false
+	            var indefiniteKey = ns + o.nsseparator + key + (((options.count && !needsPlural(options, lngs[0])) || !options.count) ? o.indefiniteSuffix : "");
+	            translated = translate(indefiniteKey, optionsWithoutIndef);
+	            if (translated != o.indefiniteNotFound) {
+	                return translated;
+	            }
+	        }
+	    
+	        var found;
+	        var keys = key.split(o.keyseparator);
+	        for (var i = 0, len = lngs.length; i < len; i++ ) {
+	            if (found !== undefined) break;
+	    
+	            var l = lngs[i];
+	    
+	            var x = 0;
+	            var value = resStore[l] && resStore[l][ns];
+	            while (keys[x]) {
+	                value = value && value[keys[x]];
+	                x++;
+	            }
+	            if (value !== undefined && (!o.showKeyIfEmpty || value !== '')) {
+	                var valueType = Object.prototype.toString.apply(value);
+	                if (typeof value === 'string') {
+	                    value = applyReplacement(value, options);
+	                    value = applyReuse(value, options);
+	                } else if (valueType === '[object Array]' && !o.returnObjectTrees && !options.returnObjectTrees) {
+	                    value = value.join('\n');
+	                    value = applyReplacement(value, options);
+	                    value = applyReuse(value, options);
+	                } else if (value === null && o.fallbackOnNull === true) {
+	                    value = undefined;
+	                } else if (value !== null) {
+	                    if (!o.returnObjectTrees && !options.returnObjectTrees) {
+	                        if (o.objectTreeKeyHandler && typeof o.objectTreeKeyHandler == 'function') {
+	                            value = o.objectTreeKeyHandler(key, value, l, ns, options);
+	                        } else {
+	                            value = 'key \'' + ns + ':' + key + ' (' + l + ')\' ' +
+	                                'returned an object instead of string.';
+	                            f.log(value);
+	                        }
+	                    } else if (valueType !== '[object Number]' && valueType !== '[object Function]' && valueType !== '[object RegExp]') {
+	                        var copy = (valueType === '[object Array]') ? [] : {}; // apply child translation on a copy
+	                        f.each(value, function(m) {
+	                            copy[m] = _translate(ns + o.nsseparator + key + o.keyseparator + m, options);
+	                        });
+	                        value = copy;
+	                    }
+	                }
+	    
+	                if (typeof value === 'string' && value.trim() === '' && o.fallbackOnEmpty === true)
+	                    value = undefined;
+	    
+	                found = value;
+	            }
+	        }
+	    
+	        if (found === undefined && !options.isFallbackLookup && (o.fallbackToDefaultNS === true || (o.fallbackNS && o.fallbackNS.length > 0))) {
+	            // set flag for fallback lookup - avoid recursion
+	            options.isFallbackLookup = true;
+	    
+	            if (o.fallbackNS.length) {
+	    
+	                for (var y = 0, lenY = o.fallbackNS.length; y < lenY; y++) {
+	                    found = _find(o.fallbackNS[y] + o.nsseparator + key, options);
+	    
+	                    if (found || (found==="" && o.fallbackOnEmpty === false)) {
+	                        /* compare value without namespace */
+	                        var foundValue = found.indexOf(o.nsseparator) > -1 ? found.split(o.nsseparator)[1] : found
+	                          , notFoundValue = notFound.indexOf(o.nsseparator) > -1 ? notFound.split(o.nsseparator)[1] : notFound;
+	    
+	                        if (foundValue !== notFoundValue) break;
+	                    }
+	                }
+	            } else {
+	                options.ns = o.ns.defaultNs;
+	                found = _find(key, options); // fallback to default NS
+	            }
+	            options.isFallbackLookup = false;
+	        }
+	    
+	        return found;
+	    }
+	    function detectLanguage() {
+	        var detectedLng;
+	        var whitelist = o.lngWhitelist || [];
+	        var userLngChoices = [];
+	    
+	        // get from qs
+	        var qsParm = [];
+	        if (typeof window !== 'undefined') {
+	            (function() {
+	                var query = window.location.search.substring(1);
+	                var params = query.split('&');
+	                for (var i=0; i<params.length; i++) {
+	                    var pos = params[i].indexOf('=');
+	                    if (pos > 0) {
+	                        var key = params[i].substring(0,pos);
+	                        if (key == o.detectLngQS) {
+	                            userLngChoices.push(params[i].substring(pos+1));
+	                        }
+	                    }
+	                }
+	            })();
+	        }
+	    
+	        // get from cookie
+	        if (o.useCookie && typeof document !== 'undefined') {
+	            var c = f.cookie.read(o.cookieName);
+	            if (c) userLngChoices.push(c);
+	        }
+	    
+	        // get from localStorage
+	        if (o.detectLngFromLocalStorage && typeof window !== 'undefined' && window.localStorage) {
+	            var lang = f.localStorage.getItem('i18next_lng');
+	            if (lang) {
+	                userLngChoices.push(lang);
+	            }
+	        }
+	    
+	        // get from navigator
+	        if (typeof navigator !== 'undefined') {
+	            if (navigator.languages) { // chrome only; not an array, so can't use .push.apply instead of iterating
+	                for (var i=0;i<navigator.languages.length;i++) {
+	                    userLngChoices.push(navigator.languages[i]);
+	                }
+	            }
+	            if (navigator.userLanguage) {
+	                userLngChoices.push(navigator.userLanguage);
+	            }
+	            if (navigator.language) {
+	                userLngChoices.push(navigator.language);
+	            }
+	        }
+	    
+	        (function() {
+	            for (var i=0;i<userLngChoices.length;i++) {
+	                var lng = userLngChoices[i];
+	    
+	                if (lng.indexOf('-') > -1) {
+	                    var parts = lng.split('-');
+	                    lng = o.lowerCaseLng ?
+	                        parts[0].toLowerCase() +  '-' + parts[1].toLowerCase() :
+	                        parts[0].toLowerCase() +  '-' + parts[1].toUpperCase();
+	                }
+	    
+	                if (whitelist.length === 0 || whitelist.indexOf(lng) > -1) {
+	                    detectedLng = lng;
+	                    break;
+	                }
+	            }
+	        })();
+	    
+	        //fallback
+	        if (!detectedLng){
+	          detectedLng = o.fallbackLng[0];
+	        }
+	        
+	        return detectedLng;
+	    }
+	    // definition http://translate.sourceforge.net/wiki/l10n/pluralforms
+	    
+	    /* [code, name, numbers, pluralsType] */
+	    var _rules = [
+	        ["ach", "Acholi", [1,2], 1],
+	        ["af", "Afrikaans",[1,2], 2],
+	        ["ak", "Akan", [1,2], 1],
+	        ["am", "Amharic", [1,2], 1],
+	        ["an", "Aragonese",[1,2], 2],
+	        ["ar", "Arabic", [0,1,2,3,11,100],5],
+	        ["arn", "Mapudungun",[1,2], 1],
+	        ["ast", "Asturian", [1,2], 2],
+	        ["ay", "Aymará", [1], 3],
+	        ["az", "Azerbaijani",[1,2],2],
+	        ["be", "Belarusian",[1,2,5],4],
+	        ["bg", "Bulgarian",[1,2], 2],
+	        ["bn", "Bengali", [1,2], 2],
+	        ["bo", "Tibetan", [1], 3],
+	        ["br", "Breton", [1,2], 1],
+	        ["bs", "Bosnian", [1,2,5],4],
+	        ["ca", "Catalan", [1,2], 2],
+	        ["cgg", "Chiga", [1], 3],
+	        ["cs", "Czech", [1,2,5],6],
+	        ["csb", "Kashubian",[1,2,5],7],
+	        ["cy", "Welsh", [1,2,3,8],8],
+	        ["da", "Danish", [1,2], 2],
+	        ["de", "German", [1,2], 2],
+	        ["dev", "Development Fallback", [1,2], 2],
+	        ["dz", "Dzongkha", [1], 3],
+	        ["el", "Greek", [1,2], 2],
+	        ["en", "English", [1,2], 2],
+	        ["eo", "Esperanto",[1,2], 2],
+	        ["es", "Spanish", [1,2], 2],
+	        ["es_ar","Argentinean Spanish", [1,2], 2],
+	        ["et", "Estonian", [1,2], 2],
+	        ["eu", "Basque", [1,2], 2],
+	        ["fa", "Persian", [1], 3],
+	        ["fi", "Finnish", [1,2], 2],
+	        ["fil", "Filipino", [1,2], 1],
+	        ["fo", "Faroese", [1,2], 2],
+	        ["fr", "French", [1,2], 9],
+	        ["fur", "Friulian", [1,2], 2],
+	        ["fy", "Frisian", [1,2], 2],
+	        ["ga", "Irish", [1,2,3,7,11],10],
+	        ["gd", "Scottish Gaelic",[1,2,3,20],11],
+	        ["gl", "Galician", [1,2], 2],
+	        ["gu", "Gujarati", [1,2], 2],
+	        ["gun", "Gun", [1,2], 1],
+	        ["ha", "Hausa", [1,2], 2],
+	        ["he", "Hebrew", [1,2], 2],
+	        ["hi", "Hindi", [1,2], 2],
+	        ["hr", "Croatian", [1,2,5],4],
+	        ["hu", "Hungarian",[1,2], 2],
+	        ["hy", "Armenian", [1,2], 2],
+	        ["ia", "Interlingua",[1,2],2],
+	        ["id", "Indonesian",[1], 3],
+	        ["is", "Icelandic",[1,2], 12],
+	        ["it", "Italian", [1,2], 2],
+	        ["ja", "Japanese", [1], 3],
+	        ["jbo", "Lojban", [1], 3],
+	        ["jv", "Javanese", [0,1], 13],
+	        ["ka", "Georgian", [1], 3],
+	        ["kk", "Kazakh", [1], 3],
+	        ["km", "Khmer", [1], 3],
+	        ["kn", "Kannada", [1,2], 2],
+	        ["ko", "Korean", [1], 3],
+	        ["ku", "Kurdish", [1,2], 2],
+	        ["kw", "Cornish", [1,2,3,4],14],
+	        ["ky", "Kyrgyz", [1], 3],
+	        ["lb", "Letzeburgesch",[1,2],2],
+	        ["ln", "Lingala", [1,2], 1],
+	        ["lo", "Lao", [1], 3],
+	        ["lt", "Lithuanian",[1,2,10],15],
+	        ["lv", "Latvian", [1,2,0],16],
+	        ["mai", "Maithili", [1,2], 2],
+	        ["mfe", "Mauritian Creole",[1,2],1],
+	        ["mg", "Malagasy", [1,2], 1],
+	        ["mi", "Maori", [1,2], 1],
+	        ["mk", "Macedonian",[1,2],17],
+	        ["ml", "Malayalam",[1,2], 2],
+	        ["mn", "Mongolian",[1,2], 2],
+	        ["mnk", "Mandinka", [0,1,2],18],
+	        ["mr", "Marathi", [1,2], 2],
+	        ["ms", "Malay", [1], 3],
+	        ["mt", "Maltese", [1,2,11,20],19],
+	        ["nah", "Nahuatl", [1,2], 2],
+	        ["nap", "Neapolitan",[1,2], 2],
+	        ["nb", "Norwegian Bokmal",[1,2],2],
+	        ["ne", "Nepali", [1,2], 2],
+	        ["nl", "Dutch", [1,2], 2],
+	        ["nn", "Norwegian Nynorsk",[1,2],2],
+	        ["no", "Norwegian",[1,2], 2],
+	        ["nso", "Northern Sotho",[1,2],2],
+	        ["oc", "Occitan", [1,2], 1],
+	        ["or", "Oriya", [2,1], 2],
+	        ["pa", "Punjabi", [1,2], 2],
+	        ["pap", "Papiamento",[1,2], 2],
+	        ["pl", "Polish", [1,2,5],7],
+	        ["pms", "Piemontese",[1,2], 2],
+	        ["ps", "Pashto", [1,2], 2],
+	        ["pt", "Portuguese",[1,2], 2],
+	        ["pt_br","Brazilian Portuguese",[1,2], 2],
+	        ["rm", "Romansh", [1,2], 2],
+	        ["ro", "Romanian", [1,2,20],20],
+	        ["ru", "Russian", [1,2,5],4],
+	        ["sah", "Yakut", [1], 3],
+	        ["sco", "Scots", [1,2], 2],
+	        ["se", "Northern Sami",[1,2], 2],
+	        ["si", "Sinhala", [1,2], 2],
+	        ["sk", "Slovak", [1,2,5],6],
+	        ["sl", "Slovenian",[5,1,2,3],21],
+	        ["so", "Somali", [1,2], 2],
+	        ["son", "Songhay", [1,2], 2],
+	        ["sq", "Albanian", [1,2], 2],
+	        ["sr", "Serbian", [1,2,5],4],
+	        ["su", "Sundanese",[1], 3],
+	        ["sv", "Swedish", [1,2], 2],
+	        ["sw", "Swahili", [1,2], 2],
+	        ["ta", "Tamil", [1,2], 2],
+	        ["te", "Telugu", [1,2], 2],
+	        ["tg", "Tajik", [1,2], 1],
+	        ["th", "Thai", [1], 3],
+	        ["ti", "Tigrinya", [1,2], 1],
+	        ["tk", "Turkmen", [1,2], 2],
+	        ["tr", "Turkish", [1,2], 1],
+	        ["tt", "Tatar", [1], 3],
+	        ["ug", "Uyghur", [1], 3],
+	        ["uk", "Ukrainian",[1,2,5],4],
+	        ["ur", "Urdu", [1,2], 2],
+	        ["uz", "Uzbek", [1,2], 1],
+	        ["vi", "Vietnamese",[1], 3],
+	        ["wa", "Walloon", [1,2], 1],
+	        ["wo", "Wolof", [1], 3],
+	        ["yo", "Yoruba", [1,2], 2],
+	        ["zh", "Chinese", [1], 3]
+	    ];
+	    
+	    var _rulesPluralsTypes = {
+	        1: function(n) {return Number(n > 1);},
+	        2: function(n) {return Number(n != 1);},
+	        3: function(n) {return 0;},
+	        4: function(n) {return Number(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);},
+	        5: function(n) {return Number(n===0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 ? 4 : 5);},
+	        6: function(n) {return Number((n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2);},
+	        7: function(n) {return Number(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);},
+	        8: function(n) {return Number((n==1) ? 0 : (n==2) ? 1 : (n != 8 && n != 11) ? 2 : 3);},
+	        9: function(n) {return Number(n >= 2);},
+	        10: function(n) {return Number(n==1 ? 0 : n==2 ? 1 : n<7 ? 2 : n<11 ? 3 : 4) ;},
+	        11: function(n) {return Number((n==1 || n==11) ? 0 : (n==2 || n==12) ? 1 : (n > 2 && n < 20) ? 2 : 3);},
+	        12: function(n) {return Number(n%10!=1 || n%100==11);},
+	        13: function(n) {return Number(n !== 0);},
+	        14: function(n) {return Number((n==1) ? 0 : (n==2) ? 1 : (n == 3) ? 2 : 3);},
+	        15: function(n) {return Number(n%10==1 && n%100!=11 ? 0 : n%10>=2 && (n%100<10 || n%100>=20) ? 1 : 2);},
+	        16: function(n) {return Number(n%10==1 && n%100!=11 ? 0 : n !== 0 ? 1 : 2);},
+	        17: function(n) {return Number(n==1 || n%10==1 ? 0 : 1);},
+	        18: function(n) {return Number(0 ? 0 : n==1 ? 1 : 2);},
+	        19: function(n) {return Number(n==1 ? 0 : n===0 || ( n%100>1 && n%100<11) ? 1 : (n%100>10 && n%100<20 ) ? 2 : 3);},
+	        20: function(n) {return Number(n==1 ? 0 : (n===0 || (n%100 > 0 && n%100 < 20)) ? 1 : 2);},
+	        21: function(n) {return Number(n%100==1 ? 1 : n%100==2 ? 2 : n%100==3 || n%100==4 ? 3 : 0); }
+	    };
+	    
+	    var pluralExtensions = {
+	    
+	        rules: (function () {
+	            var l, rules = {};
+	            for (l=_rules.length; l-- ;) {
+	                rules[_rules[l][0]] = {
+	                    name: _rules[l][1],
+	                    numbers: _rules[l][2],
+	                    plurals: _rulesPluralsTypes[_rules[l][3]]
+	                }
+	            }
+	            return rules;
+	        }()),
+	    
+	        // you can add your own pluralExtensions
+	        addRule: function(lng, obj) {
+	            pluralExtensions.rules[lng] = obj;
+	        },
+	    
+	        setCurrentLng: function(lng) {
+	            if (!pluralExtensions.currentRule || pluralExtensions.currentRule.lng !== lng) {
+	                var parts = lng.split('-');
+	    
+	                pluralExtensions.currentRule = {
+	                    lng: lng,
+	                    rule: pluralExtensions.rules[parts[0]]
+	                };
+	            }
+	        },
+	    
+	        needsPlural: function(lng, count) {
+	            var parts = lng.split('-');
+	    
+	            var ext;
+	            if (pluralExtensions.currentRule && pluralExtensions.currentRule.lng === lng) {
+	                ext = pluralExtensions.currentRule.rule; 
+	            } else {
+	                ext = pluralExtensions.rules[parts[f.getCountyIndexOfLng(lng)]];
+	            }
+	    
+	            if (ext && ext.numbers.length <= 1) {
+	                return false;
+	            } else {
+	                return this.get(lng, count) !== 1;
+	            }
+	        },
+	    
+	        get: function(lng, count) {
+	            var parts = lng.split('-');
+	    
+	            function getResult(l, c) {
+	                var ext;
+	                if (pluralExtensions.currentRule && pluralExtensions.currentRule.lng === lng) {
+	                    ext = pluralExtensions.currentRule.rule; 
+	                } else {
+	                    ext = pluralExtensions.rules[l];
+	                }
+	                if (ext) {
+	                    var i;
+	                    if (ext.noAbs) {
+	                        i = ext.plurals(c);
+	                    } else {
+	                        i = ext.plurals(Math.abs(c));
+	                    }
+	                    
+	                    var number = ext.numbers[i];
+	                    if (ext.numbers.length === 2 && ext.numbers[0] === 1) {
+	                        if (number === 2) { 
+	                            number = -1; // regular plural
+	                        } else if (number === 1) {
+	                            number = 1; // singular
+	                        }
+	                    }//console.log(count + '-' + number);
+	                    return number;
+	                } else {
+	                    return c === 1 ? '1' : '-1';
+	                }
+	            }
+	                        
+	            return getResult(parts[f.getCountyIndexOfLng(lng)], count);
+	        }
+	    
+	    };
+	    var postProcessors = {};
+	    var addPostProcessor = function(name, fc) {
+	        postProcessors[name] = fc;
+	    };
+	    // sprintf support
+	    var sprintf = (function() {
+	        function get_type(variable) {
+	            return Object.prototype.toString.call(variable).slice(8, -1).toLowerCase();
+	        }
+	        function str_repeat(input, multiplier) {
+	            for (var output = []; multiplier > 0; output[--multiplier] = input) {/* do nothing */}
+	            return output.join('');
+	        }
+	    
+	        var str_format = function() {
+	            if (!str_format.cache.hasOwnProperty(arguments[0])) {
+	                str_format.cache[arguments[0]] = str_format.parse(arguments[0]);
+	            }
+	            return str_format.format.call(null, str_format.cache[arguments[0]], arguments);
+	        };
+	    
+	        str_format.format = function(parse_tree, argv) {
+	            var cursor = 1, tree_length = parse_tree.length, node_type = '', arg, output = [], i, k, match, pad, pad_character, pad_length;
+	            for (i = 0; i < tree_length; i++) {
+	                node_type = get_type(parse_tree[i]);
+	                if (node_type === 'string') {
+	                    output.push(parse_tree[i]);
+	                }
+	                else if (node_type === 'array') {
+	                    match = parse_tree[i]; // convenience purposes only
+	                    if (match[2]) { // keyword argument
+	                        arg = argv[cursor];
+	                        for (k = 0; k < match[2].length; k++) {
+	                            if (!arg.hasOwnProperty(match[2][k])) {
+	                                throw(sprintf('[sprintf] property "%s" does not exist', match[2][k]));
+	                            }
+	                            arg = arg[match[2][k]];
+	                        }
+	                    }
+	                    else if (match[1]) { // positional argument (explicit)
+	                        arg = argv[match[1]];
+	                    }
+	                    else { // positional argument (implicit)
+	                        arg = argv[cursor++];
+	                    }
+	    
+	                    if (/[^s]/.test(match[8]) && (get_type(arg) != 'number')) {
+	                        throw(sprintf('[sprintf] expecting number but found %s', get_type(arg)));
+	                    }
+	                    switch (match[8]) {
+	                        case 'b': arg = arg.toString(2); break;
+	                        case 'c': arg = String.fromCharCode(arg); break;
+	                        case 'd': arg = parseInt(arg, 10); break;
+	                        case 'e': arg = match[7] ? arg.toExponential(match[7]) : arg.toExponential(); break;
+	                        case 'f': arg = match[7] ? parseFloat(arg).toFixed(match[7]) : parseFloat(arg); break;
+	                        case 'o': arg = arg.toString(8); break;
+	                        case 's': arg = ((arg = String(arg)) && match[7] ? arg.substring(0, match[7]) : arg); break;
+	                        case 'u': arg = Math.abs(arg); break;
+	                        case 'x': arg = arg.toString(16); break;
+	                        case 'X': arg = arg.toString(16).toUpperCase(); break;
+	                    }
+	                    arg = (/[def]/.test(match[8]) && match[3] && arg >= 0 ? '+'+ arg : arg);
+	                    pad_character = match[4] ? match[4] == '0' ? '0' : match[4].charAt(1) : ' ';
+	                    pad_length = match[6] - String(arg).length;
+	                    pad = match[6] ? str_repeat(pad_character, pad_length) : '';
+	                    output.push(match[5] ? arg + pad : pad + arg);
+	                }
+	            }
+	            return output.join('');
+	        };
+	    
+	        str_format.cache = {};
+	    
+	        str_format.parse = function(fmt) {
+	            var _fmt = fmt, match = [], parse_tree = [], arg_names = 0;
+	            while (_fmt) {
+	                if ((match = /^[^\x25]+/.exec(_fmt)) !== null) {
+	                    parse_tree.push(match[0]);
+	                }
+	                else if ((match = /^\x25{2}/.exec(_fmt)) !== null) {
+	                    parse_tree.push('%');
+	                }
+	                else if ((match = /^\x25(?:([1-9]\d*)\$|\(([^\)]+)\))?(\+)?(0|'[^$])?(-)?(\d+)?(?:\.(\d+))?([b-fosuxX])/.exec(_fmt)) !== null) {
+	                    if (match[2]) {
+	                        arg_names |= 1;
+	                        var field_list = [], replacement_field = match[2], field_match = [];
+	                        if ((field_match = /^([a-z_][a-z_\d]*)/i.exec(replacement_field)) !== null) {
+	                            field_list.push(field_match[1]);
+	                            while ((replacement_field = replacement_field.substring(field_match[0].length)) !== '') {
+	                                if ((field_match = /^\.([a-z_][a-z_\d]*)/i.exec(replacement_field)) !== null) {
+	                                    field_list.push(field_match[1]);
+	                                }
+	                                else if ((field_match = /^\[(\d+)\]/.exec(replacement_field)) !== null) {
+	                                    field_list.push(field_match[1]);
+	                                }
+	                                else {
+	                                    throw('[sprintf] huh?');
+	                                }
+	                            }
+	                        }
+	                        else {
+	                            throw('[sprintf] huh?');
+	                        }
+	                        match[2] = field_list;
+	                    }
+	                    else {
+	                        arg_names |= 2;
+	                    }
+	                    if (arg_names === 3) {
+	                        throw('[sprintf] mixing positional and named placeholders is not (yet) supported');
+	                    }
+	                    parse_tree.push(match);
+	                }
+	                else {
+	                    throw('[sprintf] huh?');
+	                }
+	                _fmt = _fmt.substring(match[0].length);
+	            }
+	            return parse_tree;
+	        };
+	    
+	        return str_format;
+	    })();
+	    
+	    var vsprintf = function(fmt, argv) {
+	        argv.unshift(fmt);
+	        return sprintf.apply(null, argv);
+	    };
+	    
+	    addPostProcessor("sprintf", function(val, key, opts) {
+	        if (!opts.sprintf) return val;
+	    
+	        if (Object.prototype.toString.apply(opts.sprintf) === '[object Array]') {
+	            return vsprintf(val, opts.sprintf);
+	        } else if (typeof opts.sprintf === 'object') {
+	            return sprintf(val, opts.sprintf);
+	        }
+	    
+	        return val;
+	    });
+	    // public api interface
+	    i18n.init = init;
+	    i18n.isInitialized = isInitialized;
+	    i18n.setLng = setLng;
+	    i18n.preload = preload;
+	    i18n.addResourceBundle = addResourceBundle;
+	    i18n.hasResourceBundle = hasResourceBundle;
+	    i18n.getResourceBundle = getResourceBundle;
+	    i18n.addResource = addResource;
+	    i18n.addResources = addResources;
+	    i18n.removeResourceBundle = removeResourceBundle;
+	    i18n.loadNamespace = loadNamespace;
+	    i18n.loadNamespaces = loadNamespaces;
+	    i18n.setDefaultNamespace = setDefaultNamespace;
+	    i18n.t = translate;
+	    i18n.translate = translate;
+	    i18n.exists = exists;
+	    i18n.detectLanguage = f.detectLanguage;
+	    i18n.pluralExtensions = pluralExtensions;
+	    i18n.sync = sync;
+	    i18n.functions = f;
+	    i18n.lng = lng;
+	    i18n.addPostProcessor = addPostProcessor;
+	    i18n.applyReplacement = f.applyReplacement;
+	    i18n.options = o;
+	    i18n.noConflict = noConflict;
+
+	})( false ? window : exports);
+
+/***/ },
+/* 8 */
+/***/ function(module, exports, __webpack_require__) {
+
+	var ContextMenu = __webpack_require__(9);
+	var util = __webpack_require__(4);
+	var i18next = __webpack_require__(7);
 
 	/**
 	 * @constructor Node
@@ -3906,7 +6271,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var domDrag = document.createElement('button');
 	        dom.drag = domDrag;
 	        domDrag.className = 'dragarea';
-	        domDrag.title = 'Drag to move this field (Alt+Shift+Arrows)';
+	        domDrag.title = i18next.t('drag_title');
 	        tdDrag.appendChild(domDrag);
 	      }
 	    }
@@ -3917,7 +6282,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    var menu = document.createElement('button');
 	    dom.menu = menu;
 	    menu.className = 'contextmenu';
-	    menu.title = 'Click to open the actions menu (Ctrl+M)';
+	    menu.title = i18next.t('action_menu_title');
 	    tdMenu.appendChild(dom.menu);
 	    dom.tr.appendChild(tdMenu);
 	  }
@@ -4382,9 +6747,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	  var expand = document.createElement('button');
 	  if (this._hasChilds()) {
 	    expand.className = this.expanded ? 'expanded' : 'collapsed';
-	    expand.title =
-	        'Click to expand/collapse this field (Ctrl+E). \n' +
-	        'Ctrl+Click to expand/collapse including all childs.';
+	    expand.title = i18next.t('expand_title');
 	  }
 	  else {
 	    expand.className = 'invisible';
@@ -4932,7 +7295,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	  newNode.expand(true);
 	  this.parent.insertBefore(newNode, this);
 	  this.editor.highlighter.unhighlight();
-	  newNode.focus('field');
+
+	    if(newNode.getField() === '') {
+	        newNode.focus('field');
+	    } else {
+	        newNode.focus('value');
+	    }
+
 	  var newSelection = this.editor.getSelection();
 
 	  this.editor._onAction('insertBeforeNode', {
@@ -4962,7 +7331,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	  newNode.expand(true);
 	  this.parent.insertAfter(newNode, this);
 	  this.editor.highlighter.unhighlight();
-	  newNode.focus('field');
+	    if(newNode.getField() === '') {
+	        newNode.focus('field');
+	    } else {
+	        newNode.focus('value');
+	    }
 	  var newSelection = this.editor.getSelection();
 
 	  this.editor._onAction('insertAfterNode', {
@@ -4992,7 +7365,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	  newNode.expand(true);
 	  this.parent.appendChild(newNode);
 	  this.editor.highlighter.unhighlight();
-	  newNode.focus('field');
+	    if(newNode.getField() === '') {
+	        newNode.focus('field');
+	    } else {
+	        newNode.focus('value');
+	    }
 	  var newSelection = this.editor.getSelection();
 
 	  this.editor._onAction('appendNode', {
@@ -5263,6 +7640,11 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	// titles with explanation for the different types
 	Node.TYPE_TITLES = {
+	  'auto': i18next.t('auto_title'),
+	  'object': i18next.t('object_title'),
+	  'array': i18next.t('array_title'),
+	  'string': i18next.t('string_title')
+		  /*
 	  'auto': 'Field type "auto". ' +
 	      'The field type is automatically determined from the value ' +
 	      'and can be a string, number, boolean, or null.',
@@ -5273,6 +7655,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	  'string': 'Field type "string". ' +
 	      'Field type is not determined from the value, ' +
 	      'but always returned as string.'
+		  */
 	};
 
 	/**
@@ -5288,8 +7671,8 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	  if (this.editable.value) {
 	    items.push({
-	      text: 'Type',
-	      title: 'Change the type of this field',
+	      text: i18next.t('type'),
+	      title: i18next.t('type_title'),
 	      className: 'type-' + this.type,
 	      submenu: [
 	        {
@@ -5302,7 +7685,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	          }
 	        },
 	        {
-	          text: 'Array',
+			  text: 'Array',
 	          className: 'type-array' +
 	              (this.type == 'array' ? ' selected' : ''),
 	          title: titles.array,
@@ -5335,25 +7718,25 @@ return /******/ (function(modules) { // webpackBootstrap
 	  if (this._hasChilds()) {
 	    var direction = ((this.sort == 'asc') ? 'desc': 'asc');
 	    items.push({
-	      text: 'Sort',
-	      title: 'Sort the childs of this ' + this.type,
+	      text: i18next.t('sort'),
+	      title: i18next.t('sort_title') + this.type,
 	      className: 'sort-' + direction,
 	      click: function () {
 	        node._onSort(direction);
 	      },
 	      submenu: [
 	        {
-	          text: 'Ascending',
+	          text: i18next.t('ascending'),
 	          className: 'sort-asc',
-	          title: 'Sort the childs of this ' + this.type + ' in ascending order',
+	          title: i18next.t('sort_asc_title'),
 	          click: function () {
 	            node._onSort('asc');
 	          }
 	        },
 	        {
-	          text: 'Descending',
+	          text: i18next.t('descending'),
 	          className: 'sort-desc',
-	          title: 'Sort the childs of this ' + this.type +' in descending order',
+	          title: i18next.t('sort_desc_title'),
 	          click: function () {
 	            node._onSort('desc');
 	          }
@@ -5374,7 +7757,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    var childs = node.parent.childs;
 	    if (node == childs[childs.length - 1]) {
 	      items.push({
-	        text: 'Append',
+	        text: i18next.t('append'),
 	        title: 'Append a new field with type \'auto\' after this field (Ctrl+Shift+Ins)',
 	        submenuTitle: 'Select the type of the field to be appended',
 	        className: 'append',
@@ -5391,7 +7774,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            }
 	          },
 	          {
-	            text: 'Array',
+	   		    text: 'Array',
 	            className: 'type-array',
 	            title: titles.array,
 	            click: function () {
@@ -5420,7 +7803,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	    // create insert button
 	    items.push({
-	      text: 'Insert',
+	      text: i18next.t('insert'),
 	      title: 'Insert a new field with type \'auto\' before this field (Ctrl+Ins)',
 	      submenuTitle: 'Select the type of the field to be inserted',
 	      className: 'insert',
@@ -5437,7 +7820,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	          }
 	        },
 	        {
-	          text: 'Array',
+			  text: 'Array',
 	          className: 'type-array',
 	          title: titles.array,
 	          click: function () {
@@ -5466,7 +7849,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    if (this.editable.field) {
 	      // create duplicate button
 	      items.push({
-	        text: 'Duplicate',
+	        text: i18next.t('duplicate'),
 	        title: 'Duplicate this field (Ctrl+D)',
 	        className: 'duplicate',
 	        click: function () {
@@ -5476,7 +7859,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	      // create remove button
 	      items.push({
-	        text: 'Remove',
+	        text: i18next.t('remove'),
 	        title: 'Remove this field (Ctrl+Del)',
 	        className: 'remove',
 	        click: function () {
@@ -5616,137 +7999,222 @@ return /******/ (function(modules) { // webpackBootstrap
 	};
 
 	// TODO: find a nicer solution to resolve this circular dependency between Node and AppendNode
-	var AppendNode = appendNodeFactory(Node);
+	var AppendNode = function AppendNode (editor) {
+	    /** @type {TreeEditor} */
+	    this.editor = editor;
+	    this.dom = {};
+	};
 
-	module.exports = Node;
+	AppendNode.prototype = Object.create(Node.prototype);
 
+	AppendNode.prototype.getDom = function () {
+	    // TODO: implement a new solution for the append node
+	    var dom = this.dom;
 
-/***/ },
-/* 8 */
-/***/ function(module, exports, __webpack_require__) {
+	    if (dom.tr) {
+	      return dom.tr;
+	    }
 
-	var ContextMenu = __webpack_require__(10);
+	    this._updateEditability();
+
+	    // a row for the append button
+	    var trAppend = document.createElement('tr');
+	    trAppend.node = this;
+	    dom.tr = trAppend;
+
+	    // TODO: consistent naming
+
+	    if (this.editable.field) {
+	      // a cell for the dragarea column
+	      dom.tdDrag = document.createElement('td');
+
+	      // create context menu
+	      var tdMenu = document.createElement('td');
+	      dom.tdMenu = tdMenu;
+	      var menu = document.createElement('button');
+	      menu.className = 'contextmenu';
+	      menu.title = 'Click to open the actions menu (Ctrl+M)';
+	      dom.menu = menu;
+	      tdMenu.appendChild(dom.menu);
+	    }
+
+	    // a cell for the contents (showing text 'empty')
+	    var tdAppend = document.createElement('td');
+	    var domText = document.createElement('div');
+	    domText.innerHTML = '(empty)';
+	    domText.className = 'readonly';
+	    tdAppend.appendChild(domText);
+	    dom.td = tdAppend;
+	    dom.text = domText;
+
+	    this.updateDom();
+
+	    return trAppend;
+	};
 
 	/**
-	 * Create a select box to be used in the editor menu's, which allows to switch mode
-	 * @param {Object} editor
-	 * @param {String[]} modes  Available modes: 'code', 'form', 'text', 'tree', 'view'
-	 * @param {String} current  Available modes: 'code', 'form', 'text', 'tree', 'view'
-	 * @returns {HTMLElement} box
-	 */
-	function createModeSwitcher(editor, modes, current) {
-	  // TODO: decouple mode switcher from editor
-
-	  /**
-	   * Switch the mode of the editor
-	   * @param {String} mode
-	   */
-	  function switchMode(mode) {
-	    // switch mode
-	    editor.setMode(mode);
-
-	    // restore focus on mode box
-	    var modeBox = editor.dom && editor.dom.modeBox;
-	    if (modeBox) {
-	      modeBox.focus();
-	    }
-	  }
-
-	  // available modes
-	  var availableModes = {
-	    code: {
-	      'text': 'Code',
-	      'title': 'Switch to code highlighter',
-	      'click': function () {
-	        switchMode('code')
-	      }
-	    },
-	    form: {
-	      'text': 'Form',
-	      'title': 'Switch to form editor',
-	      'click': function () {
-	        switchMode('form');
-	      }
-	    },
-	    text: {
-	      'text': 'Text',
-	      'title': 'Switch to plain text editor',
-	      'click': function () {
-	        switchMode('text');
-	      }
-	    },
-	    tree: {
-	      'text': 'Tree',
-	      'title': 'Switch to tree editor',
-	      'click': function () {
-	        switchMode('tree');
-	      }
-	    },
-	    view: {
-	      'text': 'View',
-	      'title': 'Switch to tree view',
-	      'click': function () {
-	        switchMode('view');
-	      }
-	    }
-	  };
-
-	  // list the selected modes
-	  var items = [];
-	  for (var i = 0; i < modes.length; i++) {
-	    var mode = modes[i];
-	    var item = availableModes[mode];
-	    if (!item) {
-	      throw new Error('Unknown mode "' + mode + '"');
+	* Update the HTML dom of the Node
+	*/
+	AppendNode.prototype.updateDom = function () {
+	    var dom = this.dom;
+	    var tdAppend = dom.td;
+	    if (tdAppend) {
+	      tdAppend.style.paddingLeft = (this.getLevel() * 24 + 26) + 'px';
+	      // TODO: not so nice hard coded offset
 	    }
 
-	    item.className = 'type-modes' + ((current == mode) ? ' selected' : '');
-	    items.push(item);
-	  }
+	    var domText = dom.text;
+	    if (domText) {
+	      domText.innerHTML = '(empty ' + this.parent.type + ')';
+	    }
 
-	  // retrieve the title of current mode
-	  var currentMode = availableModes[current];
-	  if (!currentMode) {
-	    throw new Error('Unknown mode "' + current + '"');
-	  }
-	  var currentTitle = currentMode.text;
+	    // attach or detach the contents of the append node:
+	    // hide when the parent has childs, show when the parent has no childs
+	    var trAppend = dom.tr;
+	    if (!this.isVisible()) {
+	      if (dom.tr.firstChild) {
+	        if (dom.tdDrag) {
+	          trAppend.removeChild(dom.tdDrag);
+	        }
+	        if (dom.tdMenu) {
+	          trAppend.removeChild(dom.tdMenu);
+	        }
+	        trAppend.removeChild(tdAppend);
+	      }
+	    }
+	    else {
+	      if (!dom.tr.firstChild) {
+	        if (dom.tdDrag) {
+	          trAppend.appendChild(dom.tdDrag);
+	        }
+	        if (dom.tdMenu) {
+	          trAppend.appendChild(dom.tdMenu);
+	        }
+	        trAppend.appendChild(tdAppend);
+	      }
+	    }
+	};
 
-	  // create the html element
-	  var box = document.createElement('button');
-	  box.className = 'modes separator';
-	  box.innerHTML = currentTitle + ' &#x25BE;';
-	  box.title = 'Switch editor mode';
-	  box.onclick = function () {
-	    var menu = new ContextMenu(items);
-	    menu.show(box);
-	  };
+	/**
+	* Check whether the AppendNode is currently visible.
+	* the AppendNode is visible when its parent has no childs (i.e. is empty).
+	* @return {boolean} isVisible
+	*/
+	AppendNode.prototype.isVisible = function () {
+	    return (this.parent.childs.length == 0);
+	};
 
-	  return box;
-	}
+	/**
+	* Show a contextmenu for this node
+	* @param {HTMLElement} anchor   The element to attach the menu to.
+	* @param {function} [onClose]   Callback method called when the context menu
+	*                               is being closed.
+	*/
+	AppendNode.prototype.showContextMenu = function (anchor, onClose) {
+	    var node = this;
+	    var titles = Node.TYPE_TITLES;
 
-	exports.create = createModeSwitcher;
+	    var submenu = [
+	          {
+	            'text': 'Auto',
+	            'className': 'type-auto',
+	            'title': titles.auto,
+	            'click': function () {
+	              node._onAppend('', '', 'auto');
+	            }
+	          },
+	          {
+			    'text': 'Array',
+	            'className': 'type-array',
+	            'title': titles.array,
+	            'click': function () {
+	              node._onAppend('', []);
+	            }
+	          },
+	          {
+	            'text': 'Object',
+	            'className': 'type-object',
+	            'title': titles.object,
+	            'click': function () {
+	              node._onAppend('', {});
+	            }
+	          },
+	          {
+	            'text': 'String',
+	            'className': 'type-string',
+	            'title': titles.string,
+	            'click': function () {
+	              node._onAppend('', '', 'string');
+	            }
+	          }
+	        ];
+
+	    var items = [
+	      // create append button
+	      {
+	        'text': i18next.t('append'),
+	        'title': 'Append a new field with type \'auto\' (Ctrl+Shift+Ins)',
+	        'submenuTitle': 'Select the type of the field to be appended',
+	        'className': 'insert',
+	        'click': function () {
+	          node._onAppend('', '', 'auto');
+	        },
+	        'submenu': submenu
+	      }
+	    ];
+
+	    var menu = new ContextMenu(items, {close: onClose});
+	    menu.show(anchor);
+	};
+
+	/**
+	* Handle an event. The event is catched centrally by the editor
+	* @param {Event} event
+	*/
+	AppendNode.prototype.onEvent = function (event) {
+	    var type = event.type;
+	    var target = event.target || event.srcElement;
+	    var dom = this.dom;
+
+	    // highlight the append nodes parent
+	    var menu = dom.menu;
+	    if (target == menu) {
+	      if (type == 'mouseover') {
+	        this.editor.highlighter.highlight(this.parent);
+	      }
+	      else if (type == 'mouseout') {
+	        this.editor.highlighter.unhighlight();
+	      }
+	    }
+
+	    // context menu events
+	    if (type == 'click' && target == dom.menu) {
+	      var highlighter = this.editor.highlighter;
+	      highlighter.highlight(this.parent);
+	      highlighter.lock();
+	      util.addClassName(dom.menu, 'selected');
+	      this.showContextMenu(dom.menu, function () {
+	        util.removeClassName(dom.menu, 'selected');
+	        highlighter.unlock();
+	        highlighter.unhighlight();
+	      });
+	    }
+
+	    if (type == 'keydown') {
+	      this.onKeyDown(event);
+	    }
+	};
+
+	AppendNode.prototype.constructor = AppendNode;
+
+	module.exports = { "Node": Node, "AppendNode": AppendNode };
 
 
 /***/ },
 /* 9 */
 /***/ function(module, exports, __webpack_require__) {
 
-	// load brace
-	var ace = __webpack_require__(14);
-
-	// load required ace modules
-	__webpack_require__(15);
-	__webpack_require__(16);
-	__webpack_require__(13);
-
-	module.exports = ace;
-
-
-/***/ },
-/* 10 */
-/***/ function(module, exports, __webpack_require__) {
-
-	var util = __webpack_require__(3);
+	var util = __webpack_require__(4);
 
 	/**
 	 * A context menu
@@ -5825,10 +8293,18 @@ return /******/ (function(modules) { // webpackBootstrap
 	        // create the contents of the button
 	        if (item.submenu) {
 	          // add the icon to the button
+
+	          var divContents = document.createElement('div');
+	          divContents.className = 'button-contents';
+
 	          var divIcon = document.createElement('div');
 	          divIcon.className = 'icon';
-	          button.appendChild(divIcon);
-	          button.appendChild(document.createTextNode(item.text));
+
+	          divContents.appendChild(divIcon);
+	          divContents.appendChild(document.createTextNode(item.text));
+
+	          button.appendChild(divContents);
+
 
 	          var buttonSubmenu;
 	          if (item.click) {
@@ -5873,7 +8349,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }
 	        else {
 	          // no submenu, just a button with clickhandler
-	          button.innerHTML = '<div class="icon"></div>' + item.text;
+	          button.innerHTML = '<div class="button-contents"><div class="icon"></div>' + item.text + '</div>';
 	        }
 
 	        domItems.push(domItem);
@@ -5885,9 +8361,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	  // TODO: when the editor is small, show the submenu on the right instead of inline?
 
 	  // calculate the max height of the menu with one submenu expanded
+	  // max submenu hieght is 10
 	  this.maxHeight = 0; // height in pixels
 	  items.forEach(function (item) {
-	    var height = (items.length + (item.submenu ? item.submenu.length : 0)) * 24;
+	    var height = (items.length + (item.submenu ? (item.submenu.length > 10 ? 10 : item.submenu.length) : 0)) * 24;
 	    me.maxHeight = Math.max(me.maxHeight, height);
 	  });
 	}
@@ -5939,6 +8416,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	  // position the menu
 	  var left = util.getAbsoluteLeft(anchor);
 	  var top = util.getAbsoluteTop(anchor);
+
 	  if (top + anchorHeight + menuHeight < windowBottom) {
 	    // display the menu below the anchor
 	    this.dom.menu.style.left = left + 'px';
@@ -5948,8 +8426,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	  else {
 	    // display the menu above the anchor
 	    this.dom.menu.style.left = left + 'px';
-	    this.dom.menu.style.top = '';
+	    this.dom.menu.style.top = ''
 	    this.dom.menu.style.bottom = (windowHeight - top) + 'px';
+	    this.bottom = (windowHeight - top);
 	  }
 
 	  // attach the menu to the document
@@ -6051,13 +8530,29 @@ return /******/ (function(modules) { // webpackBootstrap
 	    ul.style.display = 'block';
 	    var height = ul.clientHeight; // force a reflow in Firefox
 	    setTimeout(function () {
-	      if (me.expandedItem == domItem) {
-	        ul.style.height = (ul.childNodes.length * 24) + 'px';
-	        ul.style.padding = '5px 10px';
-	      }
+	        if (me.expandedItem == domItem) {
+	            ul.style.height = (ul.childNodes.length * 24) + 'px';
+	            ul.style.padding = '5px 10px';
+	        }
+
 	    }, 0);
 	    util.addClassName(ul.parentNode, 'selected');
 	    this.expandedItem = domItem;
+	  } else {
+	      // contracting
+	      setTimeout(function () {
+
+	          if(me.bottom) {
+	              if ( me.dom.menu.childNodes && me.dom.menu.childNodes.length && (me.dom.menu.childNodes.length * 24) > me.bottom) {
+	                  me.dom.menu.style.bottom = '';
+	                  me.dom.menu.style.top = '0';
+	              } else {
+	                  me.dom.menu.style.top = '';
+	                  me.dom.menu.style.bottom = me.bottom + 'px';
+	              }
+	          }
+
+	      }, 0);
 	  }
 	};
 
@@ -6192,812 +8687,497 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
+/* 10 */
+/***/ function(module, exports, __webpack_require__) {
+
+	var ContextMenu = __webpack_require__(9);
+	var i18next = __webpack_require__(7);
+
+	/**
+	 * Create a select box to be used in the editor menu's, which allows to switch mode
+	 * @param {Object} editor
+	 * @param {String[]} modes  Available modes: 'code', 'form', 'text', 'tree', 'view'
+	 * @param {String} current  Available modes: 'code', 'form', 'text', 'tree', 'view'
+	 * @returns {HTMLElement} box
+	 */
+	function createModeSwitcher(editor, modes, current) {
+	  // TODO: decouple mode switcher from editor
+	  //i18next.init({ resStore: resources.locales });
+	   /**
+	   * Switch the mode of the editor
+	   * @param {String} mode
+	   */
+	  function switchMode(mode) {
+	    // switch mode
+	    editor.setMode(mode);
+
+	    // restore focus on mode box
+	    var modeBox = editor.dom && editor.dom.modeBox;
+	    if (modeBox) {
+	      modeBox.focus();
+	    }
+	  }
+
+	  // available modes
+	  var availableModes = {
+	    code: {
+	      //'text': 'Code',
+		  'text' : i18next.t('code'),
+	      'title': i18next.t('code_title'),
+	      'click': function () {
+	        switchMode('code')
+	      }
+	    },
+	    form: {
+	      //'text': 'Form',
+		  'text' : i18next.t('form'),
+	      'title': i18next.t('form_title'),
+	      'click': function () {
+	        switchMode('form');
+	      }
+	    },
+	    text: {
+	      //'text': 'Text',
+		  'text' : i18next.t('text'),
+	      'title': i18next.t('text_title'),
+	      'click': function () {
+	        switchMode('text');
+	      }
+	    },
+	    tree: {
+	      //'text': 'Tree',
+		  'text' : i18next.t('tree'),
+	      'title': i18next.t('tree_title'),
+	      'click': function () {
+	        switchMode('tree');
+	      }
+	    },
+	    view: {
+	      //'text': 'View',
+		  'text' : i18next.t('view'),
+	      'title': i18next.t('view_title'),
+	      'click': function () {
+	        switchMode('view');
+	      }
+	    }
+	  };
+
+	  // list the selected modes
+	  var items = [];
+	  for (var i = 0; i < modes.length; i++) {
+	    var mode = modes[i];
+	    var item = availableModes[mode];
+	    if (!item) {
+	      throw new Error('Unknown mode "' + mode + '"');
+	    }
+
+	    item.className = 'type-modes' + ((current == mode) ? ' selected' : '');
+	    items.push(item);
+	  }
+
+	  // retrieve the title of current mode
+	  var currentMode = availableModes[current];
+	  if (!currentMode) {
+	    throw new Error('Unknown mode "' + current + '"');
+	  }
+	  var currentTitle = currentMode.text;
+
+	  // create the html element
+	  var box = document.createElement('button');
+	  box.className = 'modes separator';
+	  box.innerHTML = currentTitle + ' &#x25BE;';
+	  box.title = i18next.t('box_title');
+	  box.onclick = function () {
+	    var menu = new ContextMenu(items);
+	    menu.show(box);
+	  };
+
+	  return box;
+	}
+
+	exports.create = createModeSwitcher;
+
+
+/***/ },
 /* 11 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var util = __webpack_require__(3);
-	var ContextMenu = __webpack_require__(10);
-
-	/**
-	 * A factory function to create an AppendNode, which depends on a Node
-	 * @param {Node} Node
-	 */
-	function appendNodeFactory(Node) {
-	  /**
-	   * @constructor AppendNode
-	   * @extends Node
-	   * @param {TreeEditor} editor
-	   * Create a new AppendNode. This is a special node which is created at the
-	   * end of the list with childs for an object or array
-	   */
-	  function AppendNode (editor) {
-	    /** @type {TreeEditor} */
-	    this.editor = editor;
-	    this.dom = {};
-	  }
-
-	  AppendNode.prototype = new Node();
-
-	  /**
-	   * Return a table row with an append button.
-	   * @return {Element} dom   TR element
-	   */
-	  AppendNode.prototype.getDom = function () {
-	    // TODO: implement a new solution for the append node
-	    var dom = this.dom;
-
-	    if (dom.tr) {
-	      return dom.tr;
-	    }
-
-	    this._updateEditability();
-
-	    // a row for the append button
-	    var trAppend = document.createElement('tr');
-	    trAppend.node = this;
-	    dom.tr = trAppend;
-
-	    // TODO: consistent naming
-
-	    if (this.editable.field) {
-	      // a cell for the dragarea column
-	      dom.tdDrag = document.createElement('td');
-
-	      // create context menu
-	      var tdMenu = document.createElement('td');
-	      dom.tdMenu = tdMenu;
-	      var menu = document.createElement('button');
-	      menu.className = 'contextmenu';
-	      menu.title = 'Click to open the actions menu (Ctrl+M)';
-	      dom.menu = menu;
-	      tdMenu.appendChild(dom.menu);
-	    }
-
-	    // a cell for the contents (showing text 'empty')
-	    var tdAppend = document.createElement('td');
-	    var domText = document.createElement('div');
-	    domText.innerHTML = '(empty)';
-	    domText.className = 'readonly';
-	    tdAppend.appendChild(domText);
-	    dom.td = tdAppend;
-	    dom.text = domText;
-
-	    this.updateDom();
-
-	    return trAppend;
-	  };
-
-	  /**
-	   * Update the HTML dom of the Node
-	   */
-	  AppendNode.prototype.updateDom = function () {
-	    var dom = this.dom;
-	    var tdAppend = dom.td;
-	    if (tdAppend) {
-	      tdAppend.style.paddingLeft = (this.getLevel() * 24 + 26) + 'px';
-	      // TODO: not so nice hard coded offset
-	    }
-
-	    var domText = dom.text;
-	    if (domText) {
-	      domText.innerHTML = '(empty ' + this.parent.type + ')';
-	    }
-
-	    // attach or detach the contents of the append node:
-	    // hide when the parent has childs, show when the parent has no childs
-	    var trAppend = dom.tr;
-	    if (!this.isVisible()) {
-	      if (dom.tr.firstChild) {
-	        if (dom.tdDrag) {
-	          trAppend.removeChild(dom.tdDrag);
-	        }
-	        if (dom.tdMenu) {
-	          trAppend.removeChild(dom.tdMenu);
-	        }
-	        trAppend.removeChild(tdAppend);
-	      }
-	    }
-	    else {
-	      if (!dom.tr.firstChild) {
-	        if (dom.tdDrag) {
-	          trAppend.appendChild(dom.tdDrag);
-	        }
-	        if (dom.tdMenu) {
-	          trAppend.appendChild(dom.tdMenu);
-	        }
-	        trAppend.appendChild(tdAppend);
-	      }
-	    }
-	  };
-
-	  /**
-	   * Check whether the AppendNode is currently visible.
-	   * the AppendNode is visible when its parent has no childs (i.e. is empty).
-	   * @return {boolean} isVisible
-	   */
-	  AppendNode.prototype.isVisible = function () {
-	    return (this.parent.childs.length == 0);
-	  };
-
-	  /**
-	   * Show a contextmenu for this node
-	   * @param {HTMLElement} anchor   The element to attach the menu to.
-	   * @param {function} [onClose]   Callback method called when the context menu
-	   *                               is being closed.
-	   */
-	  AppendNode.prototype.showContextMenu = function (anchor, onClose) {
-	    var node = this;
-	    var titles = Node.TYPE_TITLES;
-	    var items = [
-	      // create append button
-	      {
-	        'text': 'Append',
-	        'title': 'Append a new field with type \'auto\' (Ctrl+Shift+Ins)',
-	        'submenuTitle': 'Select the type of the field to be appended',
-	        'className': 'insert',
-	        'click': function () {
-	          node._onAppend('', '', 'auto');
-	        },
-	        'submenu': [
-	          {
-	            'text': 'Auto',
-	            'className': 'type-auto',
-	            'title': titles.auto,
-	            'click': function () {
-	              node._onAppend('', '', 'auto');
-	            }
-	          },
-	          {
-	            'text': 'Array',
-	            'className': 'type-array',
-	            'title': titles.array,
-	            'click': function () {
-	              node._onAppend('', []);
-	            }
-	          },
-	          {
-	            'text': 'Object',
-	            'className': 'type-object',
-	            'title': titles.object,
-	            'click': function () {
-	              node._onAppend('', {});
-	            }
-	          },
-	          {
-	            'text': 'String',
-	            'className': 'type-string',
-	            'title': titles.string,
-	            'click': function () {
-	              node._onAppend('', '', 'string');
-	            }
-	          }
-	        ]
-	      }
-	    ];
-
-	    var menu = new ContextMenu(items, {close: onClose});
-	    menu.show(anchor);
-	  };
-
-	  /**
-	   * Handle an event. The event is catched centrally by the editor
-	   * @param {Event} event
-	   */
-	  AppendNode.prototype.onEvent = function (event) {
-	    var type = event.type;
-	    var target = event.target || event.srcElement;
-	    var dom = this.dom;
-
-	    // highlight the append nodes parent
-	    var menu = dom.menu;
-	    if (target == menu) {
-	      if (type == 'mouseover') {
-	        this.editor.highlighter.highlight(this.parent);
-	      }
-	      else if (type == 'mouseout') {
-	        this.editor.highlighter.unhighlight();
-	      }
-	    }
-
-	    // context menu events
-	    if (type == 'click' && target == dom.menu) {
-	      var highlighter = this.editor.highlighter;
-	      highlighter.highlight(this.parent);
-	      highlighter.lock();
-	      util.addClassName(dom.menu, 'selected');
-	      this.showContextMenu(dom.menu, function () {
-	        util.removeClassName(dom.menu, 'selected');
-	        highlighter.unlock();
-	        highlighter.unhighlight();
-	      });
-	    }
-
-	    if (type == 'keydown') {
-	      this.onKeyDown(event);
-	    }
-	  };
-
-	  return AppendNode;
+	var ace;
+	try {
+	  ace = __webpack_require__(12);
+	}
+	catch (err) {
+	  // failed to load ace, no problem, we will fall back to plain text
 	}
 
-	module.exports = appendNodeFactory;
+	var modeswitcher = __webpack_require__(10);
+	var util = __webpack_require__(4);
+	var i18next = __webpack_require__(7);
+
+	// create a mixin with the functions for text mode
+	var textmode = {};
+
+	/**
+	 * Create a text editor
+	 * @param {Element} container
+	 * @param {Object} [options]         Object with options. available options:
+	 *                                   {String} mode         Available values:
+	 *                                                         "text" (default)
+	 *                                                         or "code".
+	 *                                   {Number} indentation  Number of indentation
+	 *                                                         spaces. 2 by default.
+	 *                                   {function} change     Callback method
+	 *                                                         triggered on change
+	 *                                   {Object} ace          A custom instance of
+	 *                                                         Ace editor.
+	 * @private
+	 */
+	textmode.create = function (container, options) {
+	  // read options
+	  options = options || {};
+	  this.options = options;
+
+	  // indentation
+	  if (options.indentation) {
+	    this.indentation = Number(options.indentation);
+	  }
+	  else {
+	    this.indentation = 2; // number of spaces
+	  }
+
+	  // grab ace from options if provided
+	  var _ace = options.ace ? options.ace : ace;
+
+	  // determine mode
+	  this.mode = (options.mode == 'code') ? 'code' : 'text';
+	  if (this.mode == 'code') {
+	    // verify whether Ace editor is available and supported
+	    if (typeof _ace === 'undefined') {
+	      this.mode = 'text';
+	      util.log('WARNING: Cannot load code editor, Ace library not loaded. ' +
+	          'Falling back to plain text editor');
+	    }
+	  }
+
+	  // determine theme
+	  this.theme = options.theme || 'ace/theme/jsoneditor';
+
+	  var me = this;
+	  this.container = container;
+	  this.dom = {};
+	  this.editor = undefined;    // ace code editor
+	  this.textarea = undefined;  // plain text editor (fallback when Ace is not available)
+
+	  this.width = container.clientWidth;
+	  this.height = container.clientHeight;
+
+	  this.frame = document.createElement('div');
+	  this.frame.className = 'jsoneditor';
+	  this.frame.onclick = function (event) {
+	    // prevent default submit action when the editor is located inside a form
+	    event.preventDefault();
+	  };
+	  this.frame.onkeydown = function (event) {
+	    me._onKeyDown(event);
+	  };
+
+	  // create menu
+	  this.menu = document.createElement('div');
+	  this.menu.className = 'menu';
+	  this.frame.appendChild(this.menu);
+
+	  // create format button
+	  var buttonFormat = document.createElement('button');
+	  buttonFormat.className = 'format';
+	  buttonFormat.title = i18next.t('format_json_title');
+	  this.menu.appendChild(buttonFormat);
+	  buttonFormat.onclick = function () {
+	    try {
+	      me.format();
+	    }
+	    catch (err) {
+	      me._onError(err);
+	    }
+	  };
+
+	  // create compact button
+	  var buttonCompact = document.createElement('button');
+	  buttonCompact.className = 'compact';
+	  buttonCompact.title = i18next.t('compact_json_title');
+	  this.menu.appendChild(buttonCompact);
+	  buttonCompact.onclick = function () {
+	    try {
+	      me.compact();
+	    }
+	    catch (err) {
+	      me._onError(err);
+	    }
+	  };
+
+	  // create mode box
+	  if (this.options && this.options.modes && this.options.modes.length) {
+	    var modeBox = modeswitcher.create(this, this.options.modes, this.options.mode);
+	    this.menu.appendChild(modeBox);
+	    this.dom.modeBox = modeBox;
+	  }
+
+	  this.content = document.createElement('div');
+	  this.content.className = 'outer';
+	  this.frame.appendChild(this.content);
+
+	  this.container.appendChild(this.frame);
+
+	  if (this.mode == 'code') {
+	    this.editorDom = document.createElement('div');
+	    this.editorDom.style.height = '100%'; // TODO: move to css
+	    this.editorDom.style.width = '100%'; // TODO: move to css
+	    this.content.appendChild(this.editorDom);
+
+	    var editor = _ace.edit(this.editorDom);
+	    editor.setTheme(this.theme);
+	    editor.setShowPrintMargin(false);
+	    editor.setFontSize(13);
+	    editor.setOptions({enableBasicAutocompletion: true});
+	    editor.getSession().setMode('ace/mode/json');
+	    editor.getSession().setTabSize(this.indentation);
+	    editor.getSession().setUseSoftTabs(true);
+	    editor.getSession().setUseWrapMode(true);
+	    this.editor = editor;
+
+	    var poweredBy = document.createElement('a');
+	    poweredBy.appendChild(document.createTextNode('powered by ace'));
+	    poweredBy.href = 'http://ace.ajax.org';
+	    poweredBy.target = '_blank';
+	    poweredBy.className = 'poweredBy';
+	    poweredBy.onclick = function () {
+	      // TODO: this anchor falls below the margin of the content,
+	      // therefore the normal a.href does not work. We use a click event
+	      // for now, but this should be fixed.
+	      window.open(poweredBy.href, poweredBy.target);
+	    };
+	    this.menu.appendChild(poweredBy);
+
+	    if (options.change) {
+	      // register onchange event
+	      editor.on('change', function () {
+	        options.change();
+	      });
+	    }
+	  }
+	  else {
+	    // load a plain text textarea
+	    var textarea = document.createElement('textarea');
+	    textarea.className = 'text';
+	    textarea.spellcheck = false;
+	    this.content.appendChild(textarea);
+	    this.textarea = textarea;
+
+	    if (options.change) {
+	      // register onchange event
+	      if (this.textarea.oninput === null) {
+	        this.textarea.oninput = function () {
+	          options.change();
+	        }
+	      }
+	      else {
+	        // oninput is undefined. For IE8-
+	        this.textarea.onchange = function () {
+	          options.change();
+	        }
+	      }
+	    }
+	  }
+	};
+
+	/**
+	 * Event handler for keydown. Handles shortcut keys
+	 * @param {Event} event
+	 * @private
+	 */
+	textmode._onKeyDown = function (event) {
+	  var keynum = event.which || event.keyCode;
+	  var handled = false;
+
+	  if (keynum == 220 && event.ctrlKey) {
+	    if (event.shiftKey) { // Ctrl+Shift+\
+	      this.compact();
+	    }
+	    else { // Ctrl+\
+	      this.format();
+	    }
+	    handled = true;
+	  }
+
+	  if (handled) {
+	    event.preventDefault();
+	    event.stopPropagation();
+	  }
+	};
+
+	/**
+	 * Detach the editor from the DOM
+	 * @private
+	 */
+	textmode._delete = function () {
+	  if (this.frame && this.container && this.frame.parentNode == this.container) {
+	    this.container.removeChild(this.frame);
+	  }
+	};
+
+	/**
+	 * Throw an error. If an error callback is configured in options.error, this
+	 * callback will be invoked. Else, a regular error is thrown.
+	 * @param {Error} err
+	 * @private
+	 */
+	textmode._onError = function(err) {
+	  // TODO: onError is deprecated since version 2.2.0. cleanup some day
+	  if (typeof this.onError === 'function') {
+	    util.log('WARNING: JSONEditor.onError is deprecated. ' +
+	        'Use options.error instead.');
+	    this.onError(err);
+	  }
+
+	  if (this.options && typeof this.options.error === 'function') {
+	    this.options.error(err);
+	  }
+	  else {
+	    throw err;
+	  }
+	};
+
+	/**
+	 * Compact the code in the formatter
+	 */
+	textmode.compact = function () {
+	  var json = this.get();
+	  var text = JSON.stringify(json);
+	  this.setText(text);
+	};
+
+	/**
+	 * Format the code in the formatter
+	 */
+	textmode.format = function () {
+	  var json = this.get();
+	  var text = JSON.stringify(json, null, this.indentation);
+	  this.setText(text);
+	};
+
+	/**
+	 * Set focus to the formatter
+	 */
+	textmode.focus = function () {
+	  if (this.textarea) {
+	    this.textarea.focus();
+	  }
+	  if (this.editor) {
+	    this.editor.focus();
+	  }
+	};
+
+	/**
+	 * Resize the formatter
+	 */
+	textmode.resize = function () {
+	  if (this.editor) {
+	    var force = false;
+	    this.editor.resize(force);
+	  }
+	};
+
+	/**
+	 * Set json data in the formatter
+	 * @param {Object} json
+	 */
+	textmode.set = function(json) {
+	  this.setText(JSON.stringify(json, null, this.indentation));
+	};
+
+	/**
+	 * Get json data from the formatter
+	 * @return {Object} json
+	 */
+	textmode.get = function() {
+	  var text = this.getText();
+	  var json;
+
+	  try {
+	    json = util.parse(text); // this can throw an error
+	  }
+	  catch (err) {
+	    // try to sanitize json, replace JavaScript notation with JSON notation
+	    text = util.sanitize(text);
+
+	    // try to parse again
+	    json = util.parse(text); // this can throw an error
+	  }
+
+	  return json;
+	};
+
+	/**
+	 * Get the text contents of the editor
+	 * @return {String} jsonText
+	 */
+	textmode.getText = function() {
+	  if (this.textarea) {
+	    return this.textarea.value;
+	  }
+	  if (this.editor) {
+	    return this.editor.getValue();
+	  }
+	  return '';
+	};
+
+	/**
+	 * Set the text contents of the editor
+	 * @param {String} jsonText
+	 */
+	textmode.setText = function(jsonText) {
+	  if (this.textarea) {
+	    this.textarea.value = jsonText;
+	  }
+	  if (this.editor) {
+	    this.editor.setValue(jsonText, -1);
+	  }
+	};
+
+	// define modes
+	module.exports = [
+	  {
+	    mode: 'text',
+	    mixin: textmode,
+	    data: 'text',
+	    load: textmode.format
+	  },
+	  {
+	    mode: 'code',
+	    mixin: textmode,
+	    data: 'text',
+	    load: textmode.format
+	  }
+	];
 
 
 /***/ },
 /* 12 */
 /***/ function(module, exports, __webpack_require__) {
 
-	/* Jison generated parser */
-	var jsonlint = (function(){
-	var parser = {trace: function trace() { },
-	yy: {},
-	symbols_: {"error":2,"JSONString":3,"STRING":4,"JSONNumber":5,"NUMBER":6,"JSONNullLiteral":7,"NULL":8,"JSONBooleanLiteral":9,"TRUE":10,"FALSE":11,"JSONText":12,"JSONValue":13,"EOF":14,"JSONObject":15,"JSONArray":16,"{":17,"}":18,"JSONMemberList":19,"JSONMember":20,":":21,",":22,"[":23,"]":24,"JSONElementList":25,"$accept":0,"$end":1},
-	terminals_: {2:"error",4:"STRING",6:"NUMBER",8:"NULL",10:"TRUE",11:"FALSE",14:"EOF",17:"{",18:"}",21:":",22:",",23:"[",24:"]"},
-	productions_: [0,[3,1],[5,1],[7,1],[9,1],[9,1],[12,2],[13,1],[13,1],[13,1],[13,1],[13,1],[13,1],[15,2],[15,3],[20,3],[19,1],[19,3],[16,2],[16,3],[25,1],[25,3]],
-	performAction: function anonymous(yytext,yyleng,yylineno,yy,yystate,$$,_$) {
+	// load brace
+	var ace = __webpack_require__(13);
 
-	var $0 = $$.length - 1;
-	switch (yystate) {
-	case 1: // replace escaped characters with actual character
-	          this.$ = yytext.replace(/\\(\\|")/g, "$"+"1")
-	                     .replace(/\\n/g,'\n')
-	                     .replace(/\\r/g,'\r')
-	                     .replace(/\\t/g,'\t')
-	                     .replace(/\\v/g,'\v')
-	                     .replace(/\\f/g,'\f')
-	                     .replace(/\\b/g,'\b');
-	        
-	break;
-	case 2:this.$ = Number(yytext);
-	break;
-	case 3:this.$ = null;
-	break;
-	case 4:this.$ = true;
-	break;
-	case 5:this.$ = false;
-	break;
-	case 6:return this.$ = $$[$0-1];
-	break;
-	case 13:this.$ = {};
-	break;
-	case 14:this.$ = $$[$0-1];
-	break;
-	case 15:this.$ = [$$[$0-2], $$[$0]];
-	break;
-	case 16:this.$ = {}; this.$[$$[$0][0]] = $$[$0][1];
-	break;
-	case 17:this.$ = $$[$0-2]; $$[$0-2][$$[$0][0]] = $$[$0][1];
-	break;
-	case 18:this.$ = [];
-	break;
-	case 19:this.$ = $$[$0-1];
-	break;
-	case 20:this.$ = [$$[$0]];
-	break;
-	case 21:this.$ = $$[$0-2]; $$[$0-2].push($$[$0]);
-	break;
-	}
-	},
-	table: [{3:5,4:[1,12],5:6,6:[1,13],7:3,8:[1,9],9:4,10:[1,10],11:[1,11],12:1,13:2,15:7,16:8,17:[1,14],23:[1,15]},{1:[3]},{14:[1,16]},{14:[2,7],18:[2,7],22:[2,7],24:[2,7]},{14:[2,8],18:[2,8],22:[2,8],24:[2,8]},{14:[2,9],18:[2,9],22:[2,9],24:[2,9]},{14:[2,10],18:[2,10],22:[2,10],24:[2,10]},{14:[2,11],18:[2,11],22:[2,11],24:[2,11]},{14:[2,12],18:[2,12],22:[2,12],24:[2,12]},{14:[2,3],18:[2,3],22:[2,3],24:[2,3]},{14:[2,4],18:[2,4],22:[2,4],24:[2,4]},{14:[2,5],18:[2,5],22:[2,5],24:[2,5]},{14:[2,1],18:[2,1],21:[2,1],22:[2,1],24:[2,1]},{14:[2,2],18:[2,2],22:[2,2],24:[2,2]},{3:20,4:[1,12],18:[1,17],19:18,20:19},{3:5,4:[1,12],5:6,6:[1,13],7:3,8:[1,9],9:4,10:[1,10],11:[1,11],13:23,15:7,16:8,17:[1,14],23:[1,15],24:[1,21],25:22},{1:[2,6]},{14:[2,13],18:[2,13],22:[2,13],24:[2,13]},{18:[1,24],22:[1,25]},{18:[2,16],22:[2,16]},{21:[1,26]},{14:[2,18],18:[2,18],22:[2,18],24:[2,18]},{22:[1,28],24:[1,27]},{22:[2,20],24:[2,20]},{14:[2,14],18:[2,14],22:[2,14],24:[2,14]},{3:20,4:[1,12],20:29},{3:5,4:[1,12],5:6,6:[1,13],7:3,8:[1,9],9:4,10:[1,10],11:[1,11],13:30,15:7,16:8,17:[1,14],23:[1,15]},{14:[2,19],18:[2,19],22:[2,19],24:[2,19]},{3:5,4:[1,12],5:6,6:[1,13],7:3,8:[1,9],9:4,10:[1,10],11:[1,11],13:31,15:7,16:8,17:[1,14],23:[1,15]},{18:[2,17],22:[2,17]},{18:[2,15],22:[2,15]},{22:[2,21],24:[2,21]}],
-	defaultActions: {16:[2,6]},
-	parseError: function parseError(str, hash) {
-	    throw new Error(str);
-	},
-	parse: function parse(input) {
-	    var self = this,
-	        stack = [0],
-	        vstack = [null], // semantic value stack
-	        lstack = [], // location stack
-	        table = this.table,
-	        yytext = '',
-	        yylineno = 0,
-	        yyleng = 0,
-	        recovering = 0,
-	        TERROR = 2,
-	        EOF = 1;
+	// load required ace modules
+	__webpack_require__(16);
+	__webpack_require__(18);
+	__webpack_require__(19);
+	__webpack_require__(20);
 
-	    //this.reductionCount = this.shiftCount = 0;
+	module.exports = ace;
 
-	    this.lexer.setInput(input);
-	    this.lexer.yy = this.yy;
-	    this.yy.lexer = this.lexer;
-	    if (typeof this.lexer.yylloc == 'undefined')
-	        this.lexer.yylloc = {};
-	    var yyloc = this.lexer.yylloc;
-	    lstack.push(yyloc);
-
-	    if (typeof this.yy.parseError === 'function')
-	        this.parseError = this.yy.parseError;
-
-	    function popStack (n) {
-	        stack.length = stack.length - 2*n;
-	        vstack.length = vstack.length - n;
-	        lstack.length = lstack.length - n;
-	    }
-
-	    function lex() {
-	        var token;
-	        token = self.lexer.lex() || 1; // $end = 1
-	        // if token isn't its numeric value, convert
-	        if (typeof token !== 'number') {
-	            token = self.symbols_[token] || token;
-	        }
-	        return token;
-	    }
-
-	    var symbol, preErrorSymbol, state, action, a, r, yyval={},p,len,newState, expected;
-	    while (true) {
-	        // retreive state number from top of stack
-	        state = stack[stack.length-1];
-
-	        // use default actions if available
-	        if (this.defaultActions[state]) {
-	            action = this.defaultActions[state];
-	        } else {
-	            if (symbol == null)
-	                symbol = lex();
-	            // read action for current state and first input
-	            action = table[state] && table[state][symbol];
-	        }
-
-	        // handle parse error
-	        _handle_error:
-	        if (typeof action === 'undefined' || !action.length || !action[0]) {
-
-	            if (!recovering) {
-	                // Report error
-	                expected = [];
-	                for (p in table[state]) if (this.terminals_[p] && p > 2) {
-	                    expected.push("'"+this.terminals_[p]+"'");
-	                }
-	                var errStr = '';
-	                if (this.lexer.showPosition) {
-	                    errStr = 'Parse error on line '+(yylineno+1)+":\n"+this.lexer.showPosition()+"\nExpecting "+expected.join(', ') + ", got '" + this.terminals_[symbol]+ "'";
-	                } else {
-	                    errStr = 'Parse error on line '+(yylineno+1)+": Unexpected " +
-	                                  (symbol == 1 /*EOF*/ ? "end of input" :
-	                                              ("'"+(this.terminals_[symbol] || symbol)+"'"));
-	                }
-	                this.parseError(errStr,
-	                    {text: this.lexer.match, token: this.terminals_[symbol] || symbol, line: this.lexer.yylineno, loc: yyloc, expected: expected});
-	            }
-
-	            // just recovered from another error
-	            if (recovering == 3) {
-	                if (symbol == EOF) {
-	                    throw new Error(errStr || 'Parsing halted.');
-	                }
-
-	                // discard current lookahead and grab another
-	                yyleng = this.lexer.yyleng;
-	                yytext = this.lexer.yytext;
-	                yylineno = this.lexer.yylineno;
-	                yyloc = this.lexer.yylloc;
-	                symbol = lex();
-	            }
-
-	            // try to recover from error
-	            while (1) {
-	                // check for error recovery rule in this state
-	                if ((TERROR.toString()) in table[state]) {
-	                    break;
-	                }
-	                if (state == 0) {
-	                    throw new Error(errStr || 'Parsing halted.');
-	                }
-	                popStack(1);
-	                state = stack[stack.length-1];
-	            }
-
-	            preErrorSymbol = symbol; // save the lookahead token
-	            symbol = TERROR;         // insert generic error symbol as new lookahead
-	            state = stack[stack.length-1];
-	            action = table[state] && table[state][TERROR];
-	            recovering = 3; // allow 3 real symbols to be shifted before reporting a new error
-	        }
-
-	        // this shouldn't happen, unless resolve defaults are off
-	        if (action[0] instanceof Array && action.length > 1) {
-	            throw new Error('Parse Error: multiple actions possible at state: '+state+', token: '+symbol);
-	        }
-
-	        switch (action[0]) {
-
-	            case 1: // shift
-	                //this.shiftCount++;
-
-	                stack.push(symbol);
-	                vstack.push(this.lexer.yytext);
-	                lstack.push(this.lexer.yylloc);
-	                stack.push(action[1]); // push state
-	                symbol = null;
-	                if (!preErrorSymbol) { // normal execution/no error
-	                    yyleng = this.lexer.yyleng;
-	                    yytext = this.lexer.yytext;
-	                    yylineno = this.lexer.yylineno;
-	                    yyloc = this.lexer.yylloc;
-	                    if (recovering > 0)
-	                        recovering--;
-	                } else { // error just occurred, resume old lookahead f/ before error
-	                    symbol = preErrorSymbol;
-	                    preErrorSymbol = null;
-	                }
-	                break;
-
-	            case 2: // reduce
-	                //this.reductionCount++;
-
-	                len = this.productions_[action[1]][1];
-
-	                // perform semantic action
-	                yyval.$ = vstack[vstack.length-len]; // default to $$ = $1
-	                // default location, uses first token for firsts, last for lasts
-	                yyval._$ = {
-	                    first_line: lstack[lstack.length-(len||1)].first_line,
-	                    last_line: lstack[lstack.length-1].last_line,
-	                    first_column: lstack[lstack.length-(len||1)].first_column,
-	                    last_column: lstack[lstack.length-1].last_column
-	                };
-	                r = this.performAction.call(yyval, yytext, yyleng, yylineno, this.yy, action[1], vstack, lstack);
-
-	                if (typeof r !== 'undefined') {
-	                    return r;
-	                }
-
-	                // pop off stack
-	                if (len) {
-	                    stack = stack.slice(0,-1*len*2);
-	                    vstack = vstack.slice(0, -1*len);
-	                    lstack = lstack.slice(0, -1*len);
-	                }
-
-	                stack.push(this.productions_[action[1]][0]);    // push nonterminal (reduce)
-	                vstack.push(yyval.$);
-	                lstack.push(yyval._$);
-	                // goto new state = table[STATE][NONTERMINAL]
-	                newState = table[stack[stack.length-2]][stack[stack.length-1]];
-	                stack.push(newState);
-	                break;
-
-	            case 3: // accept
-	                return true;
-	        }
-
-	    }
-
-	    return true;
-	}};
-	/* Jison generated lexer */
-	var lexer = (function(){
-	var lexer = ({EOF:1,
-	parseError:function parseError(str, hash) {
-	        if (this.yy.parseError) {
-	            this.yy.parseError(str, hash);
-	        } else {
-	            throw new Error(str);
-	        }
-	    },
-	setInput:function (input) {
-	        this._input = input;
-	        this._more = this._less = this.done = false;
-	        this.yylineno = this.yyleng = 0;
-	        this.yytext = this.matched = this.match = '';
-	        this.conditionStack = ['INITIAL'];
-	        this.yylloc = {first_line:1,first_column:0,last_line:1,last_column:0};
-	        return this;
-	    },
-	input:function () {
-	        var ch = this._input[0];
-	        this.yytext+=ch;
-	        this.yyleng++;
-	        this.match+=ch;
-	        this.matched+=ch;
-	        var lines = ch.match(/\n/);
-	        if (lines) this.yylineno++;
-	        this._input = this._input.slice(1);
-	        return ch;
-	    },
-	unput:function (ch) {
-	        this._input = ch + this._input;
-	        return this;
-	    },
-	more:function () {
-	        this._more = true;
-	        return this;
-	    },
-	less:function (n) {
-	        this._input = this.match.slice(n) + this._input;
-	    },
-	pastInput:function () {
-	        var past = this.matched.substr(0, this.matched.length - this.match.length);
-	        return (past.length > 20 ? '...':'') + past.substr(-20).replace(/\n/g, "");
-	    },
-	upcomingInput:function () {
-	        var next = this.match;
-	        if (next.length < 20) {
-	            next += this._input.substr(0, 20-next.length);
-	        }
-	        return (next.substr(0,20)+(next.length > 20 ? '...':'')).replace(/\n/g, "");
-	    },
-	showPosition:function () {
-	        var pre = this.pastInput();
-	        var c = new Array(pre.length + 1).join("-");
-	        return pre + this.upcomingInput() + "\n" + c+"^";
-	    },
-	next:function () {
-	        if (this.done) {
-	            return this.EOF;
-	        }
-	        if (!this._input) this.done = true;
-
-	        var token,
-	            match,
-	            tempMatch,
-	            index,
-	            col,
-	            lines;
-	        if (!this._more) {
-	            this.yytext = '';
-	            this.match = '';
-	        }
-	        var rules = this._currentRules();
-	        for (var i=0;i < rules.length; i++) {
-	            tempMatch = this._input.match(this.rules[rules[i]]);
-	            if (tempMatch && (!match || tempMatch[0].length > match[0].length)) {
-	                match = tempMatch;
-	                index = i;
-	                if (!this.options.flex) break;
-	            }
-	        }
-	        if (match) {
-	            lines = match[0].match(/\n.*/g);
-	            if (lines) this.yylineno += lines.length;
-	            this.yylloc = {first_line: this.yylloc.last_line,
-	                           last_line: this.yylineno+1,
-	                           first_column: this.yylloc.last_column,
-	                           last_column: lines ? lines[lines.length-1].length-1 : this.yylloc.last_column + match[0].length}
-	            this.yytext += match[0];
-	            this.match += match[0];
-	            this.yyleng = this.yytext.length;
-	            this._more = false;
-	            this._input = this._input.slice(match[0].length);
-	            this.matched += match[0];
-	            token = this.performAction.call(this, this.yy, this, rules[index],this.conditionStack[this.conditionStack.length-1]);
-	            if (this.done && this._input) this.done = false;
-	            if (token) return token;
-	            else return;
-	        }
-	        if (this._input === "") {
-	            return this.EOF;
-	        } else {
-	            this.parseError('Lexical error on line '+(this.yylineno+1)+'. Unrecognized text.\n'+this.showPosition(), 
-	                    {text: "", token: null, line: this.yylineno});
-	        }
-	    },
-	lex:function lex() {
-	        var r = this.next();
-	        if (typeof r !== 'undefined') {
-	            return r;
-	        } else {
-	            return this.lex();
-	        }
-	    },
-	begin:function begin(condition) {
-	        this.conditionStack.push(condition);
-	    },
-	popState:function popState() {
-	        return this.conditionStack.pop();
-	    },
-	_currentRules:function _currentRules() {
-	        return this.conditions[this.conditionStack[this.conditionStack.length-1]].rules;
-	    },
-	topState:function () {
-	        return this.conditionStack[this.conditionStack.length-2];
-	    },
-	pushState:function begin(condition) {
-	        this.begin(condition);
-	    }});
-	lexer.options = {};
-	lexer.performAction = function anonymous(yy,yy_,$avoiding_name_collisions,YY_START) {
-
-	var YYSTATE=YY_START
-	switch($avoiding_name_collisions) {
-	case 0:/* skip whitespace */
-	break;
-	case 1:return 6
-	break;
-	case 2:yy_.yytext = yy_.yytext.substr(1,yy_.yyleng-2); return 4
-	break;
-	case 3:return 17
-	break;
-	case 4:return 18
-	break;
-	case 5:return 23
-	break;
-	case 6:return 24
-	break;
-	case 7:return 22
-	break;
-	case 8:return 21
-	break;
-	case 9:return 10
-	break;
-	case 10:return 11
-	break;
-	case 11:return 8
-	break;
-	case 12:return 14
-	break;
-	case 13:return 'INVALID'
-	break;
-	}
-	};
-	lexer.rules = [/^(?:\s+)/,/^(?:(-?([0-9]|[1-9][0-9]+))(\.[0-9]+)?([eE][-+]?[0-9]+)?\b)/,/^(?:"(?:\\[\\"bfnrt/]|\\u[a-fA-F0-9]{4}|[^\\\0-\x09\x0a-\x1f"])*")/,/^(?:\{)/,/^(?:\})/,/^(?:\[)/,/^(?:\])/,/^(?:,)/,/^(?::)/,/^(?:true\b)/,/^(?:false\b)/,/^(?:null\b)/,/^(?:$)/,/^(?:.)/];
-	lexer.conditions = {"INITIAL":{"rules":[0,1,2,3,4,5,6,7,8,9,10,11,12,13],"inclusive":true}};
-
-
-	;
-	return lexer;})()
-	parser.lexer = lexer;
-	return parser;
-	})();
-	if (true) {
-	  exports.parser = jsonlint;
-	  exports.parse = jsonlint.parse.bind(jsonlint);
-	}
 
 /***/ },
 /* 13 */
-/***/ function(module, exports, __webpack_require__) {
-
-	/* ***** BEGIN LICENSE BLOCK *****
-	 * Distributed under the BSD license:
-	 *
-	 * Copyright (c) 2010, Ajax.org B.V.
-	 * All rights reserved.
-	 * 
-	 * Redistribution and use in source and binary forms, with or without
-	 * modification, are permitted provided that the following conditions are met:
-	 *     * Redistributions of source code must retain the above copyright
-	 *       notice, this list of conditions and the following disclaimer.
-	 *     * Redistributions in binary form must reproduce the above copyright
-	 *       notice, this list of conditions and the following disclaimer in the
-	 *       documentation and/or other materials provided with the distribution.
-	 *     * Neither the name of Ajax.org B.V. nor the
-	 *       names of its contributors may be used to endorse or promote products
-	 *       derived from this software without specific prior written permission.
-	 * 
-	 * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-	 * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-	 * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-	 * DISCLAIMED. IN NO EVENT SHALL AJAX.ORG B.V. BE LIABLE FOR ANY
-	 * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-	 * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-	 * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-	 * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-	 * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-	 * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-	 *
-	 * ***** END LICENSE BLOCK ***** */
-
-	ace.define('ace/theme/jsoneditor', ['require', 'exports', 'module', 'ace/lib/dom'], function(acequire, exports, module) {
-
-	exports.isDark = false;
-	exports.cssClass = "ace-jsoneditor";
-	exports.cssText = ".ace-jsoneditor .ace_gutter {\
-	background: #ebebeb;\
-	color: #333\
-	}\
-	\
-	.ace-jsoneditor.ace_editor {\
-	font-family: droid sans mono, monospace, courier new, courier, sans-serif;\
-	line-height: 1.3;\
-	}\
-	.ace-jsoneditor .ace_print-margin {\
-	width: 1px;\
-	background: #e8e8e8\
-	}\
-	.ace-jsoneditor .ace_scroller {\
-	background-color: #FFFFFF\
-	}\
-	.ace-jsoneditor .ace_text-layer {\
-	color: gray\
-	}\
-	.ace-jsoneditor .ace_variable {\
-	color: #1a1a1a\
-	}\
-	.ace-jsoneditor .ace_cursor {\
-	border-left: 2px solid #000000\
-	}\
-	.ace-jsoneditor .ace_overwrite-cursors .ace_cursor {\
-	border-left: 0px;\
-	border-bottom: 1px solid #000000\
-	}\
-	.ace-jsoneditor .ace_marker-layer .ace_selection {\
-	background: #D5DDF6\
-	}\
-	.ace-jsoneditor.ace_multiselect .ace_selection.ace_start {\
-	box-shadow: 0 0 3px 0px #FFFFFF;\
-	border-radius: 2px\
-	}\
-	.ace-jsoneditor .ace_marker-layer .ace_step {\
-	background: rgb(255, 255, 0)\
-	}\
-	.ace-jsoneditor .ace_marker-layer .ace_bracket {\
-	margin: -1px 0 0 -1px;\
-	border: 1px solid #BFBFBF\
-	}\
-	.ace-jsoneditor .ace_marker-layer .ace_active-line {\
-	background: #FFFBD1\
-	}\
-	.ace-jsoneditor .ace_gutter-active-line {\
-	background-color : #dcdcdc\
-	}\
-	.ace-jsoneditor .ace_marker-layer .ace_selected-word {\
-	border: 1px solid #D5DDF6\
-	}\
-	.ace-jsoneditor .ace_invisible {\
-	color: #BFBFBF\
-	}\
-	.ace-jsoneditor .ace_keyword,\
-	.ace-jsoneditor .ace_meta,\
-	.ace-jsoneditor .ace_support.ace_constant.ace_property-value {\
-	color: #AF956F\
-	}\
-	.ace-jsoneditor .ace_keyword.ace_operator {\
-	color: #484848\
-	}\
-	.ace-jsoneditor .ace_keyword.ace_other.ace_unit {\
-	color: #96DC5F\
-	}\
-	.ace-jsoneditor .ace_constant.ace_language {\
-	color: darkorange\
-	}\
-	.ace-jsoneditor .ace_constant.ace_numeric {\
-	color: red\
-	}\
-	.ace-jsoneditor .ace_constant.ace_character.ace_entity {\
-	color: #BF78CC\
-	}\
-	.ace-jsoneditor .ace_invalid {\
-	color: #FFFFFF;\
-	background-color: #FF002A;\
-	}\
-	.ace-jsoneditor .ace_fold {\
-	background-color: #AF956F;\
-	border-color: #000000\
-	}\
-	.ace-jsoneditor .ace_storage,\
-	.ace-jsoneditor .ace_support.ace_class,\
-	.ace-jsoneditor .ace_support.ace_function,\
-	.ace-jsoneditor .ace_support.ace_other,\
-	.ace-jsoneditor .ace_support.ace_type {\
-	color: #C52727\
-	}\
-	.ace-jsoneditor .ace_string {\
-	color: green\
-	}\
-	.ace-jsoneditor .ace_comment {\
-	color: #BCC8BA\
-	}\
-	.ace-jsoneditor .ace_entity.ace_name.ace_tag,\
-	.ace-jsoneditor .ace_entity.ace_other.ace_attribute-name {\
-	color: #606060\
-	}\
-	.ace-jsoneditor .ace_markup.ace_underline {\
-	text-decoration: underline\
-	}\
-	.ace-jsoneditor .ace_indent-guide {\
-	background: url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAACCAYAAACZgbYnAAAAE0lEQVQImWP4////f4bLly//BwAmVgd1/w11/gAAAABJRU5ErkJggg==\") right repeat-y\
-	}";
-
-	var dom = acequire("../lib/dom");
-	dom.importCssString(exports.cssText, exports.cssClass);
-	});
-
-
-/***/ },
-/* 14 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* ***** BEGIN LICENSE BLOCK *****
@@ -10530,7 +12710,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	};
 	init(true);function init(packaged) {
 
-	    options.packaged = packaged || acequire.packaged || module.packaged || (global.define && __webpack_require__(18).packaged);
+	    options.packaged = packaged || acequire.packaged || module.packaged || (global.define && __webpack_require__(14).packaged);
 
 	    if (!global.document)
 	        return "";
@@ -23019,7 +25199,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	    try {
 	            var workerSrc = mod.src;
-	    var Blob = __webpack_require__(19);
+	    var Blob = __webpack_require__(15);
 	    var blob = new Blob([ workerSrc ], { type: 'application/javascript' });
 	    var blobUrl = (window.URL || window.webkitURL).createObjectURL(blob);
 
@@ -25213,7 +27393,49 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = window.ace.acequire("ace/ace");
 
 /***/ },
+/* 14 */
+/***/ function(module, exports) {
+
+	module.exports = function() { throw new Error("define cannot be used indirect"); };
+
+
+/***/ },
 /* 15 */
+/***/ function(module, exports) {
+
+	/* WEBPACK VAR INJECTION */(function(global) {module.exports = get_blob()
+
+	function get_blob() {
+	  if(global.Blob) {
+	    try {
+	      new Blob(['asdf'], {type: 'text/plain'})
+	      return Blob
+	    } catch(err) {}
+	  }
+
+	  var Builder = global.WebKitBlobBuilder ||
+	                global.MozBlobBuilder ||
+	                global.MSBlobBuilder
+
+	  return function(parts, bag) {
+	    var builder = new Builder
+	      , endings = bag.endings
+	      , type = bag.type
+
+	    if(endings) for(var i = 0, len = parts.length; i < len; ++i) {
+	      builder.append(parts[i], endings)
+	    } else for(var i = 0, len = parts.length; i < len; ++i) {
+	      builder.append(parts[i])
+	    }
+
+	    return type ? builder.getBlob(type) : builder.getBlob()
+	  }
+	}
+
+	/* WEBPACK VAR INJECTION */}.call(exports, (function() { return this; }())))
+
+/***/ },
+/* 16 */
 /***/ function(module, exports, __webpack_require__) {
 
 	ace.define("ace/mode/json_highlight_rules",["require","exports","module","ace/lib/oop","ace/mode/text_highlight_rules"], function(acequire, exports, module) {
@@ -25843,8 +28065,15 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 16 */
-/***/ function(module, exports, __webpack_require__) {
+/* 17 */
+/***/ function(module, exports) {
+
+	module.exports.id = 'ace/mode/json_worker';
+	module.exports.src = "\"no use strict\";(function(window){if(void 0===window.window||!window.document){window.console=function(){var msgs=Array.prototype.slice.call(arguments,0);postMessage({type:\"log\",data:msgs})},window.console.error=window.console.warn=window.console.log=window.console.trace=window.console,window.window=window,window.ace=window,window.onerror=function(message,file,line,col,err){postMessage({type:\"error\",data:{message:message,file:file,line:line,col:col,stack:err.stack}})},window.normalizeModule=function(parentId,moduleName){if(-1!==moduleName.indexOf(\"!\")){var chunks=moduleName.split(\"!\");return window.normalizeModule(parentId,chunks[0])+\"!\"+window.normalizeModule(parentId,chunks[1])}if(\".\"==moduleName.charAt(0)){var base=parentId.split(\"/\").slice(0,-1).join(\"/\");for(moduleName=(base?base+\"/\":\"\")+moduleName;-1!==moduleName.indexOf(\".\")&&previous!=moduleName;){var previous=moduleName;moduleName=moduleName.replace(/^\\.\\//,\"\").replace(/\\/\\.\\//,\"/\").replace(/[^\\/]+\\/\\.\\.\\//,\"\")}}return moduleName},window.acequire=function(parentId,id){if(id||(id=parentId,parentId=null),!id.charAt)throw Error(\"worker.js acequire() accepts only (parentId, id) as arguments\");id=window.normalizeModule(parentId,id);var module=window.acequire.modules[id];if(module)return module.initialized||(module.initialized=!0,module.exports=module.factory().exports),module.exports;var chunks=id.split(\"/\");if(!window.acequire.tlns)return console.log(\"unable to load \"+id);chunks[0]=window.acequire.tlns[chunks[0]]||chunks[0];var path=chunks.join(\"/\")+\".js\";return window.acequire.id=id,importScripts(path),window.acequire(parentId,id)},window.acequire.modules={},window.acequire.tlns={},window.define=function(id,deps,factory){if(2==arguments.length?(factory=deps,\"string\"!=typeof id&&(deps=id,id=window.acequire.id)):1==arguments.length&&(factory=id,deps=[],id=window.acequire.id),\"function\"!=typeof factory)return window.acequire.modules[id]={exports:factory,initialized:!0},void 0;deps.length||(deps=[\"require\",\"exports\",\"module\"]);var req=function(childId){return window.acequire(id,childId)};window.acequire.modules[id]={exports:{},factory:function(){var module=this,returnExports=factory.apply(this,deps.map(function(dep){switch(dep){case\"require\":return req;case\"exports\":return module.exports;case\"module\":return module;default:return req(dep)}}));return returnExports&&(module.exports=returnExports),module}}},window.define.amd={},window.initBaseUrls=function initBaseUrls(topLevelNamespaces){acequire.tlns=topLevelNamespaces},window.initSender=function initSender(){var EventEmitter=window.acequire(\"ace/lib/event_emitter\").EventEmitter,oop=window.acequire(\"ace/lib/oop\"),Sender=function(){};return function(){oop.implement(this,EventEmitter),this.callback=function(data,callbackId){postMessage({type:\"call\",id:callbackId,data:data})},this.emit=function(name,data){postMessage({type:\"event\",name:name,data:data})}}.call(Sender.prototype),new Sender};var main=window.main=null,sender=window.sender=null;window.onmessage=function(e){var msg=e.data;if(msg.command){if(!main[msg.command])throw Error(\"Unknown command:\"+msg.command);main[msg.command].apply(main,msg.args)}else if(msg.init){initBaseUrls(msg.tlns),acequire(\"ace/lib/es5-shim\"),sender=window.sender=initSender();var clazz=acequire(msg.module)[msg.classname];main=window.main=new clazz(sender)}else msg.event&&sender&&sender._signal(msg.event,msg.data)}}})(this),ace.define(\"ace/lib/oop\",[\"require\",\"exports\",\"module\"],function(acequire,exports){\"use strict\";exports.inherits=function(ctor,superCtor){ctor.super_=superCtor,ctor.prototype=Object.create(superCtor.prototype,{constructor:{value:ctor,enumerable:!1,writable:!0,configurable:!0}})},exports.mixin=function(obj,mixin){for(var key in mixin)obj[key]=mixin[key];return obj},exports.implement=function(proto,mixin){exports.mixin(proto,mixin)}}),ace.define(\"ace/lib/event_emitter\",[\"require\",\"exports\",\"module\"],function(acequire,exports){\"use strict\";var EventEmitter={},stopPropagation=function(){this.propagationStopped=!0},preventDefault=function(){this.defaultPrevented=!0};EventEmitter._emit=EventEmitter._dispatchEvent=function(eventName,e){this._eventRegistry||(this._eventRegistry={}),this._defaultHandlers||(this._defaultHandlers={});var listeners=this._eventRegistry[eventName]||[],defaultHandler=this._defaultHandlers[eventName];if(listeners.length||defaultHandler){\"object\"==typeof e&&e||(e={}),e.type||(e.type=eventName),e.stopPropagation||(e.stopPropagation=stopPropagation),e.preventDefault||(e.preventDefault=preventDefault),listeners=listeners.slice();for(var i=0;listeners.length>i&&(listeners[i](e,this),!e.propagationStopped);i++);return defaultHandler&&!e.defaultPrevented?defaultHandler(e,this):void 0}},EventEmitter._signal=function(eventName,e){var listeners=(this._eventRegistry||{})[eventName];if(listeners){listeners=listeners.slice();for(var i=0;listeners.length>i;i++)listeners[i](e,this)}},EventEmitter.once=function(eventName,callback){var _self=this;callback&&this.addEventListener(eventName,function newCallback(){_self.removeEventListener(eventName,newCallback),callback.apply(null,arguments)})},EventEmitter.setDefaultHandler=function(eventName,callback){var handlers=this._defaultHandlers;if(handlers||(handlers=this._defaultHandlers={_disabled_:{}}),handlers[eventName]){var old=handlers[eventName],disabled=handlers._disabled_[eventName];disabled||(handlers._disabled_[eventName]=disabled=[]),disabled.push(old);var i=disabled.indexOf(callback);-1!=i&&disabled.splice(i,1)}handlers[eventName]=callback},EventEmitter.removeDefaultHandler=function(eventName,callback){var handlers=this._defaultHandlers;if(handlers){var disabled=handlers._disabled_[eventName];if(handlers[eventName]==callback)handlers[eventName],disabled&&this.setDefaultHandler(eventName,disabled.pop());else if(disabled){var i=disabled.indexOf(callback);-1!=i&&disabled.splice(i,1)}}},EventEmitter.on=EventEmitter.addEventListener=function(eventName,callback,capturing){this._eventRegistry=this._eventRegistry||{};var listeners=this._eventRegistry[eventName];return listeners||(listeners=this._eventRegistry[eventName]=[]),-1==listeners.indexOf(callback)&&listeners[capturing?\"unshift\":\"push\"](callback),callback},EventEmitter.off=EventEmitter.removeListener=EventEmitter.removeEventListener=function(eventName,callback){this._eventRegistry=this._eventRegistry||{};var listeners=this._eventRegistry[eventName];if(listeners){var index=listeners.indexOf(callback);-1!==index&&listeners.splice(index,1)}},EventEmitter.removeAllListeners=function(eventName){this._eventRegistry&&(this._eventRegistry[eventName]=[])},exports.EventEmitter=EventEmitter}),ace.define(\"ace/range\",[\"require\",\"exports\",\"module\"],function(acequire,exports){\"use strict\";var comparePoints=function(p1,p2){return p1.row-p2.row||p1.column-p2.column},Range=function(startRow,startColumn,endRow,endColumn){this.start={row:startRow,column:startColumn},this.end={row:endRow,column:endColumn}};(function(){this.isEqual=function(range){return this.start.row===range.start.row&&this.end.row===range.end.row&&this.start.column===range.start.column&&this.end.column===range.end.column},this.toString=function(){return\"Range: [\"+this.start.row+\"/\"+this.start.column+\"] -> [\"+this.end.row+\"/\"+this.end.column+\"]\"},this.contains=function(row,column){return 0==this.compare(row,column)},this.compareRange=function(range){var cmp,end=range.end,start=range.start;return cmp=this.compare(end.row,end.column),1==cmp?(cmp=this.compare(start.row,start.column),1==cmp?2:0==cmp?1:0):-1==cmp?-2:(cmp=this.compare(start.row,start.column),-1==cmp?-1:1==cmp?42:0)},this.comparePoint=function(p){return this.compare(p.row,p.column)},this.containsRange=function(range){return 0==this.comparePoint(range.start)&&0==this.comparePoint(range.end)},this.intersects=function(range){var cmp=this.compareRange(range);return-1==cmp||0==cmp||1==cmp},this.isEnd=function(row,column){return this.end.row==row&&this.end.column==column},this.isStart=function(row,column){return this.start.row==row&&this.start.column==column},this.setStart=function(row,column){\"object\"==typeof row?(this.start.column=row.column,this.start.row=row.row):(this.start.row=row,this.start.column=column)},this.setEnd=function(row,column){\"object\"==typeof row?(this.end.column=row.column,this.end.row=row.row):(this.end.row=row,this.end.column=column)},this.inside=function(row,column){return 0==this.compare(row,column)?this.isEnd(row,column)||this.isStart(row,column)?!1:!0:!1},this.insideStart=function(row,column){return 0==this.compare(row,column)?this.isEnd(row,column)?!1:!0:!1},this.insideEnd=function(row,column){return 0==this.compare(row,column)?this.isStart(row,column)?!1:!0:!1},this.compare=function(row,column){return this.isMultiLine()||row!==this.start.row?this.start.row>row?-1:row>this.end.row?1:this.start.row===row?column>=this.start.column?0:-1:this.end.row===row?this.end.column>=column?0:1:0:this.start.column>column?-1:column>this.end.column?1:0},this.compareStart=function(row,column){return this.start.row==row&&this.start.column==column?-1:this.compare(row,column)},this.compareEnd=function(row,column){return this.end.row==row&&this.end.column==column?1:this.compare(row,column)},this.compareInside=function(row,column){return this.end.row==row&&this.end.column==column?1:this.start.row==row&&this.start.column==column?-1:this.compare(row,column)},this.clipRows=function(firstRow,lastRow){if(this.end.row>lastRow)var end={row:lastRow+1,column:0};else if(firstRow>this.end.row)var end={row:firstRow,column:0};if(this.start.row>lastRow)var start={row:lastRow+1,column:0};else if(firstRow>this.start.row)var start={row:firstRow,column:0};return Range.fromPoints(start||this.start,end||this.end)},this.extend=function(row,column){var cmp=this.compare(row,column);if(0==cmp)return this;if(-1==cmp)var start={row:row,column:column};else var end={row:row,column:column};return Range.fromPoints(start||this.start,end||this.end)},this.isEmpty=function(){return this.start.row===this.end.row&&this.start.column===this.end.column},this.isMultiLine=function(){return this.start.row!==this.end.row},this.clone=function(){return Range.fromPoints(this.start,this.end)},this.collapseRows=function(){return 0==this.end.column?new Range(this.start.row,0,Math.max(this.start.row,this.end.row-1),0):new Range(this.start.row,0,this.end.row,0)},this.toScreenRange=function(session){var screenPosStart=session.documentToScreenPosition(this.start),screenPosEnd=session.documentToScreenPosition(this.end);return new Range(screenPosStart.row,screenPosStart.column,screenPosEnd.row,screenPosEnd.column)},this.moveBy=function(row,column){this.start.row+=row,this.start.column+=column,this.end.row+=row,this.end.column+=column}}).call(Range.prototype),Range.fromPoints=function(start,end){return new Range(start.row,start.column,end.row,end.column)},Range.comparePoints=comparePoints,Range.comparePoints=function(p1,p2){return p1.row-p2.row||p1.column-p2.column},exports.Range=Range}),ace.define(\"ace/anchor\",[\"require\",\"exports\",\"module\",\"ace/lib/oop\",\"ace/lib/event_emitter\"],function(acequire,exports){\"use strict\";var oop=acequire(\"./lib/oop\"),EventEmitter=acequire(\"./lib/event_emitter\").EventEmitter,Anchor=exports.Anchor=function(doc,row,column){this.$onChange=this.onChange.bind(this),this.attach(doc),column===void 0?this.setPosition(row.row,row.column):this.setPosition(row,column)};(function(){oop.implement(this,EventEmitter),this.getPosition=function(){return this.$clipPositionToDocument(this.row,this.column)},this.getDocument=function(){return this.document},this.$insertRight=!1,this.onChange=function(e){var delta=e.data,range=delta.range;if(!(range.start.row==range.end.row&&range.start.row!=this.row||range.start.row>this.row||range.start.row==this.row&&range.start.column>this.column)){var row=this.row,column=this.column,start=range.start,end=range.end;\"insertText\"===delta.action?start.row===row&&column>=start.column?start.column===column&&this.$insertRight||(start.row===end.row?column+=end.column-start.column:(column-=start.column,row+=end.row-start.row)):start.row!==end.row&&row>start.row&&(row+=end.row-start.row):\"insertLines\"===delta.action?start.row===row&&0===column&&this.$insertRight||row>=start.row&&(row+=end.row-start.row):\"removeText\"===delta.action?start.row===row&&column>start.column?column=end.column>=column?start.column:Math.max(0,column-(end.column-start.column)):start.row!==end.row&&row>start.row?(end.row===row&&(column=Math.max(0,column-end.column)+start.column),row-=end.row-start.row):end.row===row&&(row-=end.row-start.row,column=Math.max(0,column-end.column)+start.column):\"removeLines\"==delta.action&&row>=start.row&&(row>=end.row?row-=end.row-start.row:(row=start.row,column=0)),this.setPosition(row,column,!0)}},this.setPosition=function(row,column,noClip){var pos;if(pos=noClip?{row:row,column:column}:this.$clipPositionToDocument(row,column),this.row!=pos.row||this.column!=pos.column){var old={row:this.row,column:this.column};this.row=pos.row,this.column=pos.column,this._signal(\"change\",{old:old,value:pos})}},this.detach=function(){this.document.removeEventListener(\"change\",this.$onChange)},this.attach=function(doc){this.document=doc||this.document,this.document.on(\"change\",this.$onChange)},this.$clipPositionToDocument=function(row,column){var pos={};return row>=this.document.getLength()?(pos.row=Math.max(0,this.document.getLength()-1),pos.column=this.document.getLine(pos.row).length):0>row?(pos.row=0,pos.column=0):(pos.row=row,pos.column=Math.min(this.document.getLine(pos.row).length,Math.max(0,column))),0>column&&(pos.column=0),pos}}).call(Anchor.prototype)}),ace.define(\"ace/document\",[\"require\",\"exports\",\"module\",\"ace/lib/oop\",\"ace/lib/event_emitter\",\"ace/range\",\"ace/anchor\"],function(acequire,exports){\"use strict\";var oop=acequire(\"./lib/oop\"),EventEmitter=acequire(\"./lib/event_emitter\").EventEmitter,Range=acequire(\"./range\").Range,Anchor=acequire(\"./anchor\").Anchor,Document=function(text){this.$lines=[],0===text.length?this.$lines=[\"\"]:Array.isArray(text)?this._insertLines(0,text):this.insert({row:0,column:0},text)};(function(){oop.implement(this,EventEmitter),this.setValue=function(text){var len=this.getLength();this.remove(new Range(0,0,len,this.getLine(len-1).length)),this.insert({row:0,column:0},text)},this.getValue=function(){return this.getAllLines().join(this.getNewLineCharacter())},this.createAnchor=function(row,column){return new Anchor(this,row,column)},this.$split=0===\"aaa\".split(/a/).length?function(text){return text.replace(/\\r\\n|\\r/g,\"\\n\").split(\"\\n\")}:function(text){return text.split(/\\r\\n|\\r|\\n/)},this.$detectNewLine=function(text){var match=text.match(/^.*?(\\r\\n|\\r|\\n)/m);this.$autoNewLine=match?match[1]:\"\\n\",this._signal(\"changeNewLineMode\")},this.getNewLineCharacter=function(){switch(this.$newLineMode){case\"windows\":return\"\\r\\n\";case\"unix\":return\"\\n\";default:return this.$autoNewLine||\"\\n\"}},this.$autoNewLine=\"\",this.$newLineMode=\"auto\",this.setNewLineMode=function(newLineMode){this.$newLineMode!==newLineMode&&(this.$newLineMode=newLineMode,this._signal(\"changeNewLineMode\"))},this.getNewLineMode=function(){return this.$newLineMode},this.isNewLine=function(text){return\"\\r\\n\"==text||\"\\r\"==text||\"\\n\"==text},this.getLine=function(row){return this.$lines[row]||\"\"},this.getLines=function(firstRow,lastRow){return this.$lines.slice(firstRow,lastRow+1)},this.getAllLines=function(){return this.getLines(0,this.getLength())},this.getLength=function(){return this.$lines.length},this.getTextRange=function(range){if(range.start.row==range.end.row)return this.getLine(range.start.row).substring(range.start.column,range.end.column);var lines=this.getLines(range.start.row,range.end.row);lines[0]=(lines[0]||\"\").substring(range.start.column);var l=lines.length-1;return range.end.row-range.start.row==l&&(lines[l]=lines[l].substring(0,range.end.column)),lines.join(this.getNewLineCharacter())},this.$clipPosition=function(position){var length=this.getLength();return position.row>=length?(position.row=Math.max(0,length-1),position.column=this.getLine(length-1).length):0>position.row&&(position.row=0),position},this.insert=function(position,text){if(!text||0===text.length)return position;position=this.$clipPosition(position),1>=this.getLength()&&this.$detectNewLine(text);var lines=this.$split(text),firstLine=lines.splice(0,1)[0],lastLine=0==lines.length?null:lines.splice(lines.length-1,1)[0];return position=this.insertInLine(position,firstLine),null!==lastLine&&(position=this.insertNewLine(position),position=this._insertLines(position.row,lines),position=this.insertInLine(position,lastLine||\"\")),position},this.insertLines=function(row,lines){return row>=this.getLength()?this.insert({row:row,column:0},\"\\n\"+lines.join(\"\\n\")):this._insertLines(Math.max(row,0),lines)},this._insertLines=function(row,lines){if(0==lines.length)return{row:row,column:0};for(;lines.length>61440;){var end=this._insertLines(row,lines.slice(0,61440));lines=lines.slice(61440),row=end.row}var args=[row,0];args.push.apply(args,lines),this.$lines.splice.apply(this.$lines,args);var range=new Range(row,0,row+lines.length,0),delta={action:\"insertLines\",range:range,lines:lines};return this._signal(\"change\",{data:delta}),range.end},this.insertNewLine=function(position){position=this.$clipPosition(position);var line=this.$lines[position.row]||\"\";this.$lines[position.row]=line.substring(0,position.column),this.$lines.splice(position.row+1,0,line.substring(position.column,line.length));var end={row:position.row+1,column:0},delta={action:\"insertText\",range:Range.fromPoints(position,end),text:this.getNewLineCharacter()};return this._signal(\"change\",{data:delta}),end},this.insertInLine=function(position,text){if(0==text.length)return position;var line=this.$lines[position.row]||\"\";this.$lines[position.row]=line.substring(0,position.column)+text+line.substring(position.column);var end={row:position.row,column:position.column+text.length},delta={action:\"insertText\",range:Range.fromPoints(position,end),text:text};return this._signal(\"change\",{data:delta}),end},this.remove=function(range){if(range instanceof Range||(range=Range.fromPoints(range.start,range.end)),range.start=this.$clipPosition(range.start),range.end=this.$clipPosition(range.end),range.isEmpty())return range.start;var firstRow=range.start.row,lastRow=range.end.row;if(range.isMultiLine()){var firstFullRow=0==range.start.column?firstRow:firstRow+1,lastFullRow=lastRow-1;range.end.column>0&&this.removeInLine(lastRow,0,range.end.column),lastFullRow>=firstFullRow&&this._removeLines(firstFullRow,lastFullRow),firstFullRow!=firstRow&&(this.removeInLine(firstRow,range.start.column,this.getLine(firstRow).length),this.removeNewLine(range.start.row))}else this.removeInLine(firstRow,range.start.column,range.end.column);return range.start},this.removeInLine=function(row,startColumn,endColumn){if(startColumn!=endColumn){var range=new Range(row,startColumn,row,endColumn),line=this.getLine(row),removed=line.substring(startColumn,endColumn),newLine=line.substring(0,startColumn)+line.substring(endColumn,line.length);this.$lines.splice(row,1,newLine);var delta={action:\"removeText\",range:range,text:removed};return this._signal(\"change\",{data:delta}),range.start}},this.removeLines=function(firstRow,lastRow){return 0>firstRow||lastRow>=this.getLength()?this.remove(new Range(firstRow,0,lastRow+1,0)):this._removeLines(firstRow,lastRow)},this._removeLines=function(firstRow,lastRow){var range=new Range(firstRow,0,lastRow+1,0),removed=this.$lines.splice(firstRow,lastRow-firstRow+1),delta={action:\"removeLines\",range:range,nl:this.getNewLineCharacter(),lines:removed};return this._signal(\"change\",{data:delta}),removed},this.removeNewLine=function(row){var firstLine=this.getLine(row),secondLine=this.getLine(row+1),range=new Range(row,firstLine.length,row+1,0),line=firstLine+secondLine;this.$lines.splice(row,2,line);var delta={action:\"removeText\",range:range,text:this.getNewLineCharacter()};this._signal(\"change\",{data:delta})},this.replace=function(range,text){if(range instanceof Range||(range=Range.fromPoints(range.start,range.end)),0==text.length&&range.isEmpty())return range.start;if(text==this.getTextRange(range))return range.end;if(this.remove(range),text)var end=this.insert(range.start,text);else end=range.start;return end},this.applyDeltas=function(deltas){for(var i=0;deltas.length>i;i++){var delta=deltas[i],range=Range.fromPoints(delta.range.start,delta.range.end);\"insertLines\"==delta.action?this.insertLines(range.start.row,delta.lines):\"insertText\"==delta.action?this.insert(range.start,delta.text):\"removeLines\"==delta.action?this._removeLines(range.start.row,range.end.row-1):\"removeText\"==delta.action&&this.remove(range)}},this.revertDeltas=function(deltas){for(var i=deltas.length-1;i>=0;i--){var delta=deltas[i],range=Range.fromPoints(delta.range.start,delta.range.end);\"insertLines\"==delta.action?this._removeLines(range.start.row,range.end.row-1):\"insertText\"==delta.action?this.remove(range):\"removeLines\"==delta.action?this._insertLines(range.start.row,delta.lines):\"removeText\"==delta.action&&this.insert(range.start,delta.text)}},this.indexToPosition=function(index,startRow){for(var lines=this.$lines||this.getAllLines(),newlineLength=this.getNewLineCharacter().length,i=startRow||0,l=lines.length;l>i;i++)if(index-=lines[i].length+newlineLength,0>index)return{row:i,column:index+lines[i].length+newlineLength};return{row:l-1,column:lines[l-1].length}},this.positionToIndex=function(pos,startRow){for(var lines=this.$lines||this.getAllLines(),newlineLength=this.getNewLineCharacter().length,index=0,row=Math.min(pos.row,lines.length),i=startRow||0;row>i;++i)index+=lines[i].length+newlineLength;return index+pos.column}}).call(Document.prototype),exports.Document=Document}),ace.define(\"ace/lib/lang\",[\"require\",\"exports\",\"module\"],function(acequire,exports){\"use strict\";exports.last=function(a){return a[a.length-1]},exports.stringReverse=function(string){return string.split(\"\").reverse().join(\"\")},exports.stringRepeat=function(string,count){for(var result=\"\";count>0;)1&count&&(result+=string),(count>>=1)&&(string+=string);return result};var trimBeginRegexp=/^\\s\\s*/,trimEndRegexp=/\\s\\s*$/;exports.stringTrimLeft=function(string){return string.replace(trimBeginRegexp,\"\")},exports.stringTrimRight=function(string){return string.replace(trimEndRegexp,\"\")},exports.copyObject=function(obj){var copy={};for(var key in obj)copy[key]=obj[key];return copy},exports.copyArray=function(array){for(var copy=[],i=0,l=array.length;l>i;i++)copy[i]=array[i]&&\"object\"==typeof array[i]?this.copyObject(array[i]):array[i];return copy},exports.deepCopy=function(obj){if(\"object\"!=typeof obj||!obj)return obj;var cons=obj.constructor;if(cons===RegExp)return obj;var copy=cons();for(var key in obj)copy[key]=\"object\"==typeof obj[key]?exports.deepCopy(obj[key]):obj[key];return copy},exports.arrayToMap=function(arr){for(var map={},i=0;arr.length>i;i++)map[arr[i]]=1;return map},exports.createMap=function(props){var map=Object.create(null);for(var i in props)map[i]=props[i];return map},exports.arrayRemove=function(array,value){for(var i=0;array.length>=i;i++)value===array[i]&&array.splice(i,1)},exports.escapeRegExp=function(str){return str.replace(/([.*+?^${}()|[\\]\\/\\\\])/g,\"\\\\$1\")},exports.escapeHTML=function(str){return str.replace(/&/g,\"&#38;\").replace(/\"/g,\"&#34;\").replace(/'/g,\"&#39;\").replace(/</g,\"&#60;\")},exports.getMatchOffsets=function(string,regExp){var matches=[];return string.replace(regExp,function(str){matches.push({offset:arguments[arguments.length-2],length:str.length})}),matches},exports.deferredCall=function(fcn){var timer=null,callback=function(){timer=null,fcn()},deferred=function(timeout){return deferred.cancel(),timer=setTimeout(callback,timeout||0),deferred};return deferred.schedule=deferred,deferred.call=function(){return this.cancel(),fcn(),deferred},deferred.cancel=function(){return clearTimeout(timer),timer=null,deferred},deferred.isPending=function(){return timer},deferred},exports.delayedCall=function(fcn,defaultTimeout){var timer=null,callback=function(){timer=null,fcn()},_self=function(timeout){null==timer&&(timer=setTimeout(callback,timeout||defaultTimeout))};return _self.delay=function(timeout){timer&&clearTimeout(timer),timer=setTimeout(callback,timeout||defaultTimeout)},_self.schedule=_self,_self.call=function(){this.cancel(),fcn()},_self.cancel=function(){timer&&clearTimeout(timer),timer=null},_self.isPending=function(){return timer},_self}}),ace.define(\"ace/worker/mirror\",[\"require\",\"exports\",\"module\",\"ace/document\",\"ace/lib/lang\"],function(acequire,exports){\"use strict\";var Document=acequire(\"../document\").Document,lang=acequire(\"../lib/lang\"),Mirror=exports.Mirror=function(sender){this.sender=sender;var doc=this.doc=new Document(\"\"),deferredUpdate=this.deferredUpdate=lang.delayedCall(this.onUpdate.bind(this)),_self=this;sender.on(\"change\",function(e){return doc.applyDeltas(e.data),_self.$timeout?deferredUpdate.schedule(_self.$timeout):(_self.onUpdate(),void 0)})};(function(){this.$timeout=500,this.setTimeout=function(timeout){this.$timeout=timeout},this.setValue=function(value){this.doc.setValue(value),this.deferredUpdate.schedule(this.$timeout)},this.getValue=function(callbackId){this.sender.callback(this.doc.getValue(),callbackId)},this.onUpdate=function(){},this.isPending=function(){return this.deferredUpdate.isPending()}}).call(Mirror.prototype)}),ace.define(\"ace/mode/json/json_parse\",[\"require\",\"exports\",\"module\"],function(){\"use strict\";var at,ch,text,value,escapee={'\"':'\"',\"\\\\\":\"\\\\\",\"/\":\"/\",b:\"\\b\",f:\"\\f\",n:\"\\n\",r:\"\\r\",t:\"\t\"},error=function(m){throw{name:\"SyntaxError\",message:m,at:at,text:text}},next=function(c){return c&&c!==ch&&error(\"Expected '\"+c+\"' instead of '\"+ch+\"'\"),ch=text.charAt(at),at+=1,ch},number=function(){var number,string=\"\";for(\"-\"===ch&&(string=\"-\",next(\"-\"));ch>=\"0\"&&\"9\">=ch;)string+=ch,next();if(\".\"===ch)for(string+=\".\";next()&&ch>=\"0\"&&\"9\">=ch;)string+=ch;if(\"e\"===ch||\"E\"===ch)for(string+=ch,next(),(\"-\"===ch||\"+\"===ch)&&(string+=ch,next());ch>=\"0\"&&\"9\">=ch;)string+=ch,next();return number=+string,isNaN(number)?(error(\"Bad number\"),void 0):number},string=function(){var hex,i,uffff,string=\"\";if('\"'===ch)for(;next();){if('\"'===ch)return next(),string;if(\"\\\\\"===ch)if(next(),\"u\"===ch){for(uffff=0,i=0;4>i&&(hex=parseInt(next(),16),isFinite(hex));i+=1)uffff=16*uffff+hex;string+=String.fromCharCode(uffff)}else{if(\"string\"!=typeof escapee[ch])break;string+=escapee[ch]}else string+=ch}error(\"Bad string\")},white=function(){for(;ch&&\" \">=ch;)next()},word=function(){switch(ch){case\"t\":return next(\"t\"),next(\"r\"),next(\"u\"),next(\"e\"),!0;case\"f\":return next(\"f\"),next(\"a\"),next(\"l\"),next(\"s\"),next(\"e\"),!1;case\"n\":return next(\"n\"),next(\"u\"),next(\"l\"),next(\"l\"),null}error(\"Unexpected '\"+ch+\"'\")},array=function(){var array=[];if(\"[\"===ch){if(next(\"[\"),white(),\"]\"===ch)return next(\"]\"),array;for(;ch;){if(array.push(value()),white(),\"]\"===ch)return next(\"]\"),array;next(\",\"),white()}}error(\"Bad array\")},object=function(){var key,object={};if(\"{\"===ch){if(next(\"{\"),white(),\"}\"===ch)return next(\"}\"),object;for(;ch;){if(key=string(),white(),next(\":\"),Object.hasOwnProperty.call(object,key)&&error('Duplicate key \"'+key+'\"'),object[key]=value(),white(),\"}\"===ch)return next(\"}\"),object;next(\",\"),white()}}error(\"Bad object\")};return value=function(){switch(white(),ch){case\"{\":return object();case\"[\":return array();case'\"':return string();case\"-\":return number();default:return ch>=\"0\"&&\"9\">=ch?number():word()}},function(source,reviver){var result;return text=source,at=0,ch=\" \",result=value(),white(),ch&&error(\"Syntax error\"),\"function\"==typeof reviver?function walk(holder,key){var k,v,value=holder[key];if(value&&\"object\"==typeof value)for(k in value)Object.hasOwnProperty.call(value,k)&&(v=walk(value,k),void 0!==v?value[k]=v:delete value[k]);return reviver.call(holder,key,value)}({\"\":result},\"\"):result}}),ace.define(\"ace/mode/json_worker\",[\"require\",\"exports\",\"module\",\"ace/lib/oop\",\"ace/worker/mirror\",\"ace/mode/json/json_parse\"],function(acequire,exports){\"use strict\";var oop=acequire(\"../lib/oop\"),Mirror=acequire(\"../worker/mirror\").Mirror,parse=acequire(\"./json/json_parse\"),JsonWorker=exports.JsonWorker=function(sender){Mirror.call(this,sender),this.setTimeout(200)};oop.inherits(JsonWorker,Mirror),function(){this.onUpdate=function(){var value=this.doc.getValue();try{value&&parse(value)}catch(e){var pos=this.doc.indexToPosition(e.at-1);return this.sender.emit(\"error\",{row:pos.row,column:pos.column,text:e.message,type:\"error\"}),void 0}this.sender.emit(\"ok\")}}.call(JsonWorker.prototype)}),ace.define(\"ace/lib/es5-shim\",[\"require\",\"exports\",\"module\"],function(){function Empty(){}function doesDefinePropertyWork(object){try{return Object.defineProperty(object,\"sentinel\",{}),\"sentinel\"in object}catch(exception){}}function toInteger(n){return n=+n,n!==n?n=0:0!==n&&n!==1/0&&n!==-(1/0)&&(n=(n>0||-1)*Math.floor(Math.abs(n))),n}Function.prototype.bind||(Function.prototype.bind=function(that){var target=this;if(\"function\"!=typeof target)throw new TypeError(\"Function.prototype.bind called on incompatible \"+target);var args=slice.call(arguments,1),bound=function(){if(this instanceof bound){var result=target.apply(this,args.concat(slice.call(arguments)));return Object(result)===result?result:this}return target.apply(that,args.concat(slice.call(arguments)))};return target.prototype&&(Empty.prototype=target.prototype,bound.prototype=new Empty,Empty.prototype=null),bound});var defineGetter,defineSetter,lookupGetter,lookupSetter,supportsAccessors,call=Function.prototype.call,prototypeOfArray=Array.prototype,prototypeOfObject=Object.prototype,slice=prototypeOfArray.slice,_toString=call.bind(prototypeOfObject.toString),owns=call.bind(prototypeOfObject.hasOwnProperty);if((supportsAccessors=owns(prototypeOfObject,\"__defineGetter__\"))&&(defineGetter=call.bind(prototypeOfObject.__defineGetter__),defineSetter=call.bind(prototypeOfObject.__defineSetter__),lookupGetter=call.bind(prototypeOfObject.__lookupGetter__),lookupSetter=call.bind(prototypeOfObject.__lookupSetter__)),2!=[1,2].splice(0).length)if(function(){function makeArray(l){var a=Array(l+2);return a[0]=a[1]=0,a}var lengthBefore,array=[];return array.splice.apply(array,makeArray(20)),array.splice.apply(array,makeArray(26)),lengthBefore=array.length,array.splice(5,0,\"XXX\"),lengthBefore+1==array.length,lengthBefore+1==array.length?!0:void 0}()){var array_splice=Array.prototype.splice;Array.prototype.splice=function(start,deleteCount){return arguments.length?array_splice.apply(this,[void 0===start?0:start,void 0===deleteCount?this.length-start:deleteCount].concat(slice.call(arguments,2))):[]}}else Array.prototype.splice=function(pos,removeCount){var length=this.length;pos>0?pos>length&&(pos=length):void 0==pos?pos=0:0>pos&&(pos=Math.max(length+pos,0)),length>pos+removeCount||(removeCount=length-pos);var removed=this.slice(pos,pos+removeCount),insert=slice.call(arguments,2),add=insert.length;if(pos===length)add&&this.push.apply(this,insert);else{var remove=Math.min(removeCount,length-pos),tailOldPos=pos+remove,tailNewPos=tailOldPos+add-remove,tailCount=length-tailOldPos,lengthAfterRemove=length-remove;if(tailOldPos>tailNewPos)for(var i=0;tailCount>i;++i)this[tailNewPos+i]=this[tailOldPos+i];else if(tailNewPos>tailOldPos)for(i=tailCount;i--;)this[tailNewPos+i]=this[tailOldPos+i];if(add&&pos===lengthAfterRemove)this.length=lengthAfterRemove,this.push.apply(this,insert);else for(this.length=lengthAfterRemove+add,i=0;add>i;++i)this[pos+i]=insert[i]}return removed};Array.isArray||(Array.isArray=function(obj){return\"[object Array]\"==_toString(obj)});var boxedString=Object(\"a\"),splitString=\"a\"!=boxedString[0]||!(0 in boxedString);if(Array.prototype.forEach||(Array.prototype.forEach=function(fun){var object=toObject(this),self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):object,thisp=arguments[1],i=-1,length=self.length>>>0;if(\"[object Function]\"!=_toString(fun))throw new TypeError;\nfor(;length>++i;)i in self&&fun.call(thisp,self[i],i,object)}),Array.prototype.map||(Array.prototype.map=function(fun){var object=toObject(this),self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):object,length=self.length>>>0,result=Array(length),thisp=arguments[1];if(\"[object Function]\"!=_toString(fun))throw new TypeError(fun+\" is not a function\");for(var i=0;length>i;i++)i in self&&(result[i]=fun.call(thisp,self[i],i,object));return result}),Array.prototype.filter||(Array.prototype.filter=function(fun){var value,object=toObject(this),self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):object,length=self.length>>>0,result=[],thisp=arguments[1];if(\"[object Function]\"!=_toString(fun))throw new TypeError(fun+\" is not a function\");for(var i=0;length>i;i++)i in self&&(value=self[i],fun.call(thisp,value,i,object)&&result.push(value));return result}),Array.prototype.every||(Array.prototype.every=function(fun){var object=toObject(this),self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):object,length=self.length>>>0,thisp=arguments[1];if(\"[object Function]\"!=_toString(fun))throw new TypeError(fun+\" is not a function\");for(var i=0;length>i;i++)if(i in self&&!fun.call(thisp,self[i],i,object))return!1;return!0}),Array.prototype.some||(Array.prototype.some=function(fun){var object=toObject(this),self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):object,length=self.length>>>0,thisp=arguments[1];if(\"[object Function]\"!=_toString(fun))throw new TypeError(fun+\" is not a function\");for(var i=0;length>i;i++)if(i in self&&fun.call(thisp,self[i],i,object))return!0;return!1}),Array.prototype.reduce||(Array.prototype.reduce=function(fun){var object=toObject(this),self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):object,length=self.length>>>0;if(\"[object Function]\"!=_toString(fun))throw new TypeError(fun+\" is not a function\");if(!length&&1==arguments.length)throw new TypeError(\"reduce of empty array with no initial value\");var result,i=0;if(arguments.length>=2)result=arguments[1];else for(;;){if(i in self){result=self[i++];break}if(++i>=length)throw new TypeError(\"reduce of empty array with no initial value\")}for(;length>i;i++)i in self&&(result=fun.call(void 0,result,self[i],i,object));return result}),Array.prototype.reduceRight||(Array.prototype.reduceRight=function(fun){var object=toObject(this),self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):object,length=self.length>>>0;if(\"[object Function]\"!=_toString(fun))throw new TypeError(fun+\" is not a function\");if(!length&&1==arguments.length)throw new TypeError(\"reduceRight of empty array with no initial value\");var result,i=length-1;if(arguments.length>=2)result=arguments[1];else for(;;){if(i in self){result=self[i--];break}if(0>--i)throw new TypeError(\"reduceRight of empty array with no initial value\")}do i in this&&(result=fun.call(void 0,result,self[i],i,object));while(i--);return result}),Array.prototype.indexOf&&-1==[0,1].indexOf(1,2)||(Array.prototype.indexOf=function(sought){var self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):toObject(this),length=self.length>>>0;if(!length)return-1;var i=0;for(arguments.length>1&&(i=toInteger(arguments[1])),i=i>=0?i:Math.max(0,length+i);length>i;i++)if(i in self&&self[i]===sought)return i;return-1}),Array.prototype.lastIndexOf&&-1==[0,1].lastIndexOf(0,-3)||(Array.prototype.lastIndexOf=function(sought){var self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):toObject(this),length=self.length>>>0;if(!length)return-1;var i=length-1;for(arguments.length>1&&(i=Math.min(i,toInteger(arguments[1]))),i=i>=0?i:length-Math.abs(i);i>=0;i--)if(i in self&&sought===self[i])return i;return-1}),Object.getPrototypeOf||(Object.getPrototypeOf=function(object){return object.__proto__||(object.constructor?object.constructor.prototype:prototypeOfObject)}),!Object.getOwnPropertyDescriptor){var ERR_NON_OBJECT=\"Object.getOwnPropertyDescriptor called on a non-object: \";Object.getOwnPropertyDescriptor=function(object,property){if(\"object\"!=typeof object&&\"function\"!=typeof object||null===object)throw new TypeError(ERR_NON_OBJECT+object);if(owns(object,property)){var descriptor,getter,setter;if(descriptor={enumerable:!0,configurable:!0},supportsAccessors){var prototype=object.__proto__;object.__proto__=prototypeOfObject;var getter=lookupGetter(object,property),setter=lookupSetter(object,property);if(object.__proto__=prototype,getter||setter)return getter&&(descriptor.get=getter),setter&&(descriptor.set=setter),descriptor}return descriptor.value=object[property],descriptor}}}if(Object.getOwnPropertyNames||(Object.getOwnPropertyNames=function(object){return Object.keys(object)}),!Object.create){var createEmpty;createEmpty=null===Object.prototype.__proto__?function(){return{__proto__:null}}:function(){var empty={};for(var i in empty)empty[i]=null;return empty.constructor=empty.hasOwnProperty=empty.propertyIsEnumerable=empty.isPrototypeOf=empty.toLocaleString=empty.toString=empty.valueOf=empty.__proto__=null,empty},Object.create=function(prototype,properties){var object;if(null===prototype)object=createEmpty();else{if(\"object\"!=typeof prototype)throw new TypeError(\"typeof prototype[\"+typeof prototype+\"] != 'object'\");var Type=function(){};Type.prototype=prototype,object=new Type,object.__proto__=prototype}return void 0!==properties&&Object.defineProperties(object,properties),object}}if(Object.defineProperty){var definePropertyWorksOnObject=doesDefinePropertyWork({}),definePropertyWorksOnDom=\"undefined\"==typeof document||doesDefinePropertyWork(document.createElement(\"div\"));if(!definePropertyWorksOnObject||!definePropertyWorksOnDom)var definePropertyFallback=Object.defineProperty}if(!Object.defineProperty||definePropertyFallback){var ERR_NON_OBJECT_DESCRIPTOR=\"Property description must be an object: \",ERR_NON_OBJECT_TARGET=\"Object.defineProperty called on non-object: \",ERR_ACCESSORS_NOT_SUPPORTED=\"getters & setters can not be defined on this javascript engine\";Object.defineProperty=function(object,property,descriptor){if(\"object\"!=typeof object&&\"function\"!=typeof object||null===object)throw new TypeError(ERR_NON_OBJECT_TARGET+object);if(\"object\"!=typeof descriptor&&\"function\"!=typeof descriptor||null===descriptor)throw new TypeError(ERR_NON_OBJECT_DESCRIPTOR+descriptor);if(definePropertyFallback)try{return definePropertyFallback.call(Object,object,property,descriptor)}catch(exception){}if(owns(descriptor,\"value\"))if(supportsAccessors&&(lookupGetter(object,property)||lookupSetter(object,property))){var prototype=object.__proto__;object.__proto__=prototypeOfObject,delete object[property],object[property]=descriptor.value,object.__proto__=prototype}else object[property]=descriptor.value;else{if(!supportsAccessors)throw new TypeError(ERR_ACCESSORS_NOT_SUPPORTED);owns(descriptor,\"get\")&&defineGetter(object,property,descriptor.get),owns(descriptor,\"set\")&&defineSetter(object,property,descriptor.set)}return object}}Object.defineProperties||(Object.defineProperties=function(object,properties){for(var property in properties)owns(properties,property)&&Object.defineProperty(object,property,properties[property]);return object}),Object.seal||(Object.seal=function(object){return object}),Object.freeze||(Object.freeze=function(object){return object});try{Object.freeze(function(){})}catch(exception){Object.freeze=function(freezeObject){return function(object){return\"function\"==typeof object?object:freezeObject(object)}}(Object.freeze)}if(Object.preventExtensions||(Object.preventExtensions=function(object){return object}),Object.isSealed||(Object.isSealed=function(){return!1}),Object.isFrozen||(Object.isFrozen=function(){return!1}),Object.isExtensible||(Object.isExtensible=function(object){if(Object(object)===object)throw new TypeError;for(var name=\"\";owns(object,name);)name+=\"?\";object[name]=!0;var returnValue=owns(object,name);return delete object[name],returnValue}),!Object.keys){var hasDontEnumBug=!0,dontEnums=[\"toString\",\"toLocaleString\",\"valueOf\",\"hasOwnProperty\",\"isPrototypeOf\",\"propertyIsEnumerable\",\"constructor\"],dontEnumsLength=dontEnums.length;for(var key in{toString:null})hasDontEnumBug=!1;Object.keys=function(object){if(\"object\"!=typeof object&&\"function\"!=typeof object||null===object)throw new TypeError(\"Object.keys called on a non-object\");var keys=[];for(var name in object)owns(object,name)&&keys.push(name);if(hasDontEnumBug)for(var i=0,ii=dontEnumsLength;ii>i;i++){var dontEnum=dontEnums[i];owns(object,dontEnum)&&keys.push(dontEnum)}return keys}}Date.now||(Date.now=function(){return(new Date).getTime()});var ws=\"\t\\n\u000b\\f\\r   ᠎             　\\u2028\\u2029﻿\";if(!String.prototype.trim||ws.trim()){ws=\"[\"+ws+\"]\";var trimBeginRegexp=RegExp(\"^\"+ws+ws+\"*\"),trimEndRegexp=RegExp(ws+ws+\"*$\");String.prototype.trim=function(){return(this+\"\").replace(trimBeginRegexp,\"\").replace(trimEndRegexp,\"\")}}var toObject=function(o){if(null==o)throw new TypeError(\"can't convert \"+o+\" to object\");return Object(o)}});";
+
+/***/ },
+/* 18 */
+/***/ function(module, exports) {
 
 	ace.define("ace/ext/searchbox",["require","exports","module","ace/lib/dom","ace/lib/lang","ace/lib/event","ace/keyboard/hash_handler","ace/lib/keys"], function(acequire, exports, module) {
 	"use strict";
@@ -26257,53 +28486,2206 @@ return /******/ (function(modules) { // webpackBootstrap
 	            
 
 /***/ },
-/* 17 */
-/***/ function(module, exports, __webpack_require__) {
-
-	module.exports.id = 'ace/mode/json_worker';
-	module.exports.src = "\"no use strict\";(function(window){if(void 0===window.window||!window.document){window.console=function(){var msgs=Array.prototype.slice.call(arguments,0);postMessage({type:\"log\",data:msgs})},window.console.error=window.console.warn=window.console.log=window.console.trace=window.console,window.window=window,window.ace=window,window.onerror=function(message,file,line,col,err){postMessage({type:\"error\",data:{message:message,file:file,line:line,col:col,stack:err.stack}})},window.normalizeModule=function(parentId,moduleName){if(-1!==moduleName.indexOf(\"!\")){var chunks=moduleName.split(\"!\");return window.normalizeModule(parentId,chunks[0])+\"!\"+window.normalizeModule(parentId,chunks[1])}if(\".\"==moduleName.charAt(0)){var base=parentId.split(\"/\").slice(0,-1).join(\"/\");for(moduleName=(base?base+\"/\":\"\")+moduleName;-1!==moduleName.indexOf(\".\")&&previous!=moduleName;){var previous=moduleName;moduleName=moduleName.replace(/^\\.\\//,\"\").replace(/\\/\\.\\//,\"/\").replace(/[^\\/]+\\/\\.\\.\\//,\"\")}}return moduleName},window.acequire=function(parentId,id){if(id||(id=parentId,parentId=null),!id.charAt)throw Error(\"worker.js acequire() accepts only (parentId, id) as arguments\");id=window.normalizeModule(parentId,id);var module=window.acequire.modules[id];if(module)return module.initialized||(module.initialized=!0,module.exports=module.factory().exports),module.exports;var chunks=id.split(\"/\");if(!window.acequire.tlns)return console.log(\"unable to load \"+id);chunks[0]=window.acequire.tlns[chunks[0]]||chunks[0];var path=chunks.join(\"/\")+\".js\";return window.acequire.id=id,importScripts(path),window.acequire(parentId,id)},window.acequire.modules={},window.acequire.tlns={},window.define=function(id,deps,factory){if(2==arguments.length?(factory=deps,\"string\"!=typeof id&&(deps=id,id=window.acequire.id)):1==arguments.length&&(factory=id,deps=[],id=window.acequire.id),\"function\"!=typeof factory)return window.acequire.modules[id]={exports:factory,initialized:!0},void 0;deps.length||(deps=[\"require\",\"exports\",\"module\"]);var req=function(childId){return window.acequire(id,childId)};window.acequire.modules[id]={exports:{},factory:function(){var module=this,returnExports=factory.apply(this,deps.map(function(dep){switch(dep){case\"require\":return req;case\"exports\":return module.exports;case\"module\":return module;default:return req(dep)}}));return returnExports&&(module.exports=returnExports),module}}},window.define.amd={},window.initBaseUrls=function initBaseUrls(topLevelNamespaces){acequire.tlns=topLevelNamespaces},window.initSender=function initSender(){var EventEmitter=window.acequire(\"ace/lib/event_emitter\").EventEmitter,oop=window.acequire(\"ace/lib/oop\"),Sender=function(){};return function(){oop.implement(this,EventEmitter),this.callback=function(data,callbackId){postMessage({type:\"call\",id:callbackId,data:data})},this.emit=function(name,data){postMessage({type:\"event\",name:name,data:data})}}.call(Sender.prototype),new Sender};var main=window.main=null,sender=window.sender=null;window.onmessage=function(e){var msg=e.data;if(msg.command){if(!main[msg.command])throw Error(\"Unknown command:\"+msg.command);main[msg.command].apply(main,msg.args)}else if(msg.init){initBaseUrls(msg.tlns),acequire(\"ace/lib/es5-shim\"),sender=window.sender=initSender();var clazz=acequire(msg.module)[msg.classname];main=window.main=new clazz(sender)}else msg.event&&sender&&sender._signal(msg.event,msg.data)}}})(this),ace.define(\"ace/lib/oop\",[\"require\",\"exports\",\"module\"],function(acequire,exports){\"use strict\";exports.inherits=function(ctor,superCtor){ctor.super_=superCtor,ctor.prototype=Object.create(superCtor.prototype,{constructor:{value:ctor,enumerable:!1,writable:!0,configurable:!0}})},exports.mixin=function(obj,mixin){for(var key in mixin)obj[key]=mixin[key];return obj},exports.implement=function(proto,mixin){exports.mixin(proto,mixin)}}),ace.define(\"ace/lib/event_emitter\",[\"require\",\"exports\",\"module\"],function(acequire,exports){\"use strict\";var EventEmitter={},stopPropagation=function(){this.propagationStopped=!0},preventDefault=function(){this.defaultPrevented=!0};EventEmitter._emit=EventEmitter._dispatchEvent=function(eventName,e){this._eventRegistry||(this._eventRegistry={}),this._defaultHandlers||(this._defaultHandlers={});var listeners=this._eventRegistry[eventName]||[],defaultHandler=this._defaultHandlers[eventName];if(listeners.length||defaultHandler){\"object\"==typeof e&&e||(e={}),e.type||(e.type=eventName),e.stopPropagation||(e.stopPropagation=stopPropagation),e.preventDefault||(e.preventDefault=preventDefault),listeners=listeners.slice();for(var i=0;listeners.length>i&&(listeners[i](e,this),!e.propagationStopped);i++);return defaultHandler&&!e.defaultPrevented?defaultHandler(e,this):void 0}},EventEmitter._signal=function(eventName,e){var listeners=(this._eventRegistry||{})[eventName];if(listeners){listeners=listeners.slice();for(var i=0;listeners.length>i;i++)listeners[i](e,this)}},EventEmitter.once=function(eventName,callback){var _self=this;callback&&this.addEventListener(eventName,function newCallback(){_self.removeEventListener(eventName,newCallback),callback.apply(null,arguments)})},EventEmitter.setDefaultHandler=function(eventName,callback){var handlers=this._defaultHandlers;if(handlers||(handlers=this._defaultHandlers={_disabled_:{}}),handlers[eventName]){var old=handlers[eventName],disabled=handlers._disabled_[eventName];disabled||(handlers._disabled_[eventName]=disabled=[]),disabled.push(old);var i=disabled.indexOf(callback);-1!=i&&disabled.splice(i,1)}handlers[eventName]=callback},EventEmitter.removeDefaultHandler=function(eventName,callback){var handlers=this._defaultHandlers;if(handlers){var disabled=handlers._disabled_[eventName];if(handlers[eventName]==callback)handlers[eventName],disabled&&this.setDefaultHandler(eventName,disabled.pop());else if(disabled){var i=disabled.indexOf(callback);-1!=i&&disabled.splice(i,1)}}},EventEmitter.on=EventEmitter.addEventListener=function(eventName,callback,capturing){this._eventRegistry=this._eventRegistry||{};var listeners=this._eventRegistry[eventName];return listeners||(listeners=this._eventRegistry[eventName]=[]),-1==listeners.indexOf(callback)&&listeners[capturing?\"unshift\":\"push\"](callback),callback},EventEmitter.off=EventEmitter.removeListener=EventEmitter.removeEventListener=function(eventName,callback){this._eventRegistry=this._eventRegistry||{};var listeners=this._eventRegistry[eventName];if(listeners){var index=listeners.indexOf(callback);-1!==index&&listeners.splice(index,1)}},EventEmitter.removeAllListeners=function(eventName){this._eventRegistry&&(this._eventRegistry[eventName]=[])},exports.EventEmitter=EventEmitter}),ace.define(\"ace/range\",[\"require\",\"exports\",\"module\"],function(acequire,exports){\"use strict\";var comparePoints=function(p1,p2){return p1.row-p2.row||p1.column-p2.column},Range=function(startRow,startColumn,endRow,endColumn){this.start={row:startRow,column:startColumn},this.end={row:endRow,column:endColumn}};(function(){this.isEqual=function(range){return this.start.row===range.start.row&&this.end.row===range.end.row&&this.start.column===range.start.column&&this.end.column===range.end.column},this.toString=function(){return\"Range: [\"+this.start.row+\"/\"+this.start.column+\"] -> [\"+this.end.row+\"/\"+this.end.column+\"]\"},this.contains=function(row,column){return 0==this.compare(row,column)},this.compareRange=function(range){var cmp,end=range.end,start=range.start;return cmp=this.compare(end.row,end.column),1==cmp?(cmp=this.compare(start.row,start.column),1==cmp?2:0==cmp?1:0):-1==cmp?-2:(cmp=this.compare(start.row,start.column),-1==cmp?-1:1==cmp?42:0)},this.comparePoint=function(p){return this.compare(p.row,p.column)},this.containsRange=function(range){return 0==this.comparePoint(range.start)&&0==this.comparePoint(range.end)},this.intersects=function(range){var cmp=this.compareRange(range);return-1==cmp||0==cmp||1==cmp},this.isEnd=function(row,column){return this.end.row==row&&this.end.column==column},this.isStart=function(row,column){return this.start.row==row&&this.start.column==column},this.setStart=function(row,column){\"object\"==typeof row?(this.start.column=row.column,this.start.row=row.row):(this.start.row=row,this.start.column=column)},this.setEnd=function(row,column){\"object\"==typeof row?(this.end.column=row.column,this.end.row=row.row):(this.end.row=row,this.end.column=column)},this.inside=function(row,column){return 0==this.compare(row,column)?this.isEnd(row,column)||this.isStart(row,column)?!1:!0:!1},this.insideStart=function(row,column){return 0==this.compare(row,column)?this.isEnd(row,column)?!1:!0:!1},this.insideEnd=function(row,column){return 0==this.compare(row,column)?this.isStart(row,column)?!1:!0:!1},this.compare=function(row,column){return this.isMultiLine()||row!==this.start.row?this.start.row>row?-1:row>this.end.row?1:this.start.row===row?column>=this.start.column?0:-1:this.end.row===row?this.end.column>=column?0:1:0:this.start.column>column?-1:column>this.end.column?1:0},this.compareStart=function(row,column){return this.start.row==row&&this.start.column==column?-1:this.compare(row,column)},this.compareEnd=function(row,column){return this.end.row==row&&this.end.column==column?1:this.compare(row,column)},this.compareInside=function(row,column){return this.end.row==row&&this.end.column==column?1:this.start.row==row&&this.start.column==column?-1:this.compare(row,column)},this.clipRows=function(firstRow,lastRow){if(this.end.row>lastRow)var end={row:lastRow+1,column:0};else if(firstRow>this.end.row)var end={row:firstRow,column:0};if(this.start.row>lastRow)var start={row:lastRow+1,column:0};else if(firstRow>this.start.row)var start={row:firstRow,column:0};return Range.fromPoints(start||this.start,end||this.end)},this.extend=function(row,column){var cmp=this.compare(row,column);if(0==cmp)return this;if(-1==cmp)var start={row:row,column:column};else var end={row:row,column:column};return Range.fromPoints(start||this.start,end||this.end)},this.isEmpty=function(){return this.start.row===this.end.row&&this.start.column===this.end.column},this.isMultiLine=function(){return this.start.row!==this.end.row},this.clone=function(){return Range.fromPoints(this.start,this.end)},this.collapseRows=function(){return 0==this.end.column?new Range(this.start.row,0,Math.max(this.start.row,this.end.row-1),0):new Range(this.start.row,0,this.end.row,0)},this.toScreenRange=function(session){var screenPosStart=session.documentToScreenPosition(this.start),screenPosEnd=session.documentToScreenPosition(this.end);return new Range(screenPosStart.row,screenPosStart.column,screenPosEnd.row,screenPosEnd.column)},this.moveBy=function(row,column){this.start.row+=row,this.start.column+=column,this.end.row+=row,this.end.column+=column}}).call(Range.prototype),Range.fromPoints=function(start,end){return new Range(start.row,start.column,end.row,end.column)},Range.comparePoints=comparePoints,Range.comparePoints=function(p1,p2){return p1.row-p2.row||p1.column-p2.column},exports.Range=Range}),ace.define(\"ace/anchor\",[\"require\",\"exports\",\"module\",\"ace/lib/oop\",\"ace/lib/event_emitter\"],function(acequire,exports){\"use strict\";var oop=acequire(\"./lib/oop\"),EventEmitter=acequire(\"./lib/event_emitter\").EventEmitter,Anchor=exports.Anchor=function(doc,row,column){this.$onChange=this.onChange.bind(this),this.attach(doc),column===void 0?this.setPosition(row.row,row.column):this.setPosition(row,column)};(function(){oop.implement(this,EventEmitter),this.getPosition=function(){return this.$clipPositionToDocument(this.row,this.column)},this.getDocument=function(){return this.document},this.$insertRight=!1,this.onChange=function(e){var delta=e.data,range=delta.range;if(!(range.start.row==range.end.row&&range.start.row!=this.row||range.start.row>this.row||range.start.row==this.row&&range.start.column>this.column)){var row=this.row,column=this.column,start=range.start,end=range.end;\"insertText\"===delta.action?start.row===row&&column>=start.column?start.column===column&&this.$insertRight||(start.row===end.row?column+=end.column-start.column:(column-=start.column,row+=end.row-start.row)):start.row!==end.row&&row>start.row&&(row+=end.row-start.row):\"insertLines\"===delta.action?start.row===row&&0===column&&this.$insertRight||row>=start.row&&(row+=end.row-start.row):\"removeText\"===delta.action?start.row===row&&column>start.column?column=end.column>=column?start.column:Math.max(0,column-(end.column-start.column)):start.row!==end.row&&row>start.row?(end.row===row&&(column=Math.max(0,column-end.column)+start.column),row-=end.row-start.row):end.row===row&&(row-=end.row-start.row,column=Math.max(0,column-end.column)+start.column):\"removeLines\"==delta.action&&row>=start.row&&(row>=end.row?row-=end.row-start.row:(row=start.row,column=0)),this.setPosition(row,column,!0)}},this.setPosition=function(row,column,noClip){var pos;if(pos=noClip?{row:row,column:column}:this.$clipPositionToDocument(row,column),this.row!=pos.row||this.column!=pos.column){var old={row:this.row,column:this.column};this.row=pos.row,this.column=pos.column,this._signal(\"change\",{old:old,value:pos})}},this.detach=function(){this.document.removeEventListener(\"change\",this.$onChange)},this.attach=function(doc){this.document=doc||this.document,this.document.on(\"change\",this.$onChange)},this.$clipPositionToDocument=function(row,column){var pos={};return row>=this.document.getLength()?(pos.row=Math.max(0,this.document.getLength()-1),pos.column=this.document.getLine(pos.row).length):0>row?(pos.row=0,pos.column=0):(pos.row=row,pos.column=Math.min(this.document.getLine(pos.row).length,Math.max(0,column))),0>column&&(pos.column=0),pos}}).call(Anchor.prototype)}),ace.define(\"ace/document\",[\"require\",\"exports\",\"module\",\"ace/lib/oop\",\"ace/lib/event_emitter\",\"ace/range\",\"ace/anchor\"],function(acequire,exports){\"use strict\";var oop=acequire(\"./lib/oop\"),EventEmitter=acequire(\"./lib/event_emitter\").EventEmitter,Range=acequire(\"./range\").Range,Anchor=acequire(\"./anchor\").Anchor,Document=function(text){this.$lines=[],0===text.length?this.$lines=[\"\"]:Array.isArray(text)?this._insertLines(0,text):this.insert({row:0,column:0},text)};(function(){oop.implement(this,EventEmitter),this.setValue=function(text){var len=this.getLength();this.remove(new Range(0,0,len,this.getLine(len-1).length)),this.insert({row:0,column:0},text)},this.getValue=function(){return this.getAllLines().join(this.getNewLineCharacter())},this.createAnchor=function(row,column){return new Anchor(this,row,column)},this.$split=0===\"aaa\".split(/a/).length?function(text){return text.replace(/\\r\\n|\\r/g,\"\\n\").split(\"\\n\")}:function(text){return text.split(/\\r\\n|\\r|\\n/)},this.$detectNewLine=function(text){var match=text.match(/^.*?(\\r\\n|\\r|\\n)/m);this.$autoNewLine=match?match[1]:\"\\n\",this._signal(\"changeNewLineMode\")},this.getNewLineCharacter=function(){switch(this.$newLineMode){case\"windows\":return\"\\r\\n\";case\"unix\":return\"\\n\";default:return this.$autoNewLine||\"\\n\"}},this.$autoNewLine=\"\",this.$newLineMode=\"auto\",this.setNewLineMode=function(newLineMode){this.$newLineMode!==newLineMode&&(this.$newLineMode=newLineMode,this._signal(\"changeNewLineMode\"))},this.getNewLineMode=function(){return this.$newLineMode},this.isNewLine=function(text){return\"\\r\\n\"==text||\"\\r\"==text||\"\\n\"==text},this.getLine=function(row){return this.$lines[row]||\"\"},this.getLines=function(firstRow,lastRow){return this.$lines.slice(firstRow,lastRow+1)},this.getAllLines=function(){return this.getLines(0,this.getLength())},this.getLength=function(){return this.$lines.length},this.getTextRange=function(range){if(range.start.row==range.end.row)return this.getLine(range.start.row).substring(range.start.column,range.end.column);var lines=this.getLines(range.start.row,range.end.row);lines[0]=(lines[0]||\"\").substring(range.start.column);var l=lines.length-1;return range.end.row-range.start.row==l&&(lines[l]=lines[l].substring(0,range.end.column)),lines.join(this.getNewLineCharacter())},this.$clipPosition=function(position){var length=this.getLength();return position.row>=length?(position.row=Math.max(0,length-1),position.column=this.getLine(length-1).length):0>position.row&&(position.row=0),position},this.insert=function(position,text){if(!text||0===text.length)return position;position=this.$clipPosition(position),1>=this.getLength()&&this.$detectNewLine(text);var lines=this.$split(text),firstLine=lines.splice(0,1)[0],lastLine=0==lines.length?null:lines.splice(lines.length-1,1)[0];return position=this.insertInLine(position,firstLine),null!==lastLine&&(position=this.insertNewLine(position),position=this._insertLines(position.row,lines),position=this.insertInLine(position,lastLine||\"\")),position},this.insertLines=function(row,lines){return row>=this.getLength()?this.insert({row:row,column:0},\"\\n\"+lines.join(\"\\n\")):this._insertLines(Math.max(row,0),lines)},this._insertLines=function(row,lines){if(0==lines.length)return{row:row,column:0};for(;lines.length>61440;){var end=this._insertLines(row,lines.slice(0,61440));lines=lines.slice(61440),row=end.row}var args=[row,0];args.push.apply(args,lines),this.$lines.splice.apply(this.$lines,args);var range=new Range(row,0,row+lines.length,0),delta={action:\"insertLines\",range:range,lines:lines};return this._signal(\"change\",{data:delta}),range.end},this.insertNewLine=function(position){position=this.$clipPosition(position);var line=this.$lines[position.row]||\"\";this.$lines[position.row]=line.substring(0,position.column),this.$lines.splice(position.row+1,0,line.substring(position.column,line.length));var end={row:position.row+1,column:0},delta={action:\"insertText\",range:Range.fromPoints(position,end),text:this.getNewLineCharacter()};return this._signal(\"change\",{data:delta}),end},this.insertInLine=function(position,text){if(0==text.length)return position;var line=this.$lines[position.row]||\"\";this.$lines[position.row]=line.substring(0,position.column)+text+line.substring(position.column);var end={row:position.row,column:position.column+text.length},delta={action:\"insertText\",range:Range.fromPoints(position,end),text:text};return this._signal(\"change\",{data:delta}),end},this.remove=function(range){if(range instanceof Range||(range=Range.fromPoints(range.start,range.end)),range.start=this.$clipPosition(range.start),range.end=this.$clipPosition(range.end),range.isEmpty())return range.start;var firstRow=range.start.row,lastRow=range.end.row;if(range.isMultiLine()){var firstFullRow=0==range.start.column?firstRow:firstRow+1,lastFullRow=lastRow-1;range.end.column>0&&this.removeInLine(lastRow,0,range.end.column),lastFullRow>=firstFullRow&&this._removeLines(firstFullRow,lastFullRow),firstFullRow!=firstRow&&(this.removeInLine(firstRow,range.start.column,this.getLine(firstRow).length),this.removeNewLine(range.start.row))}else this.removeInLine(firstRow,range.start.column,range.end.column);return range.start},this.removeInLine=function(row,startColumn,endColumn){if(startColumn!=endColumn){var range=new Range(row,startColumn,row,endColumn),line=this.getLine(row),removed=line.substring(startColumn,endColumn),newLine=line.substring(0,startColumn)+line.substring(endColumn,line.length);this.$lines.splice(row,1,newLine);var delta={action:\"removeText\",range:range,text:removed};return this._signal(\"change\",{data:delta}),range.start}},this.removeLines=function(firstRow,lastRow){return 0>firstRow||lastRow>=this.getLength()?this.remove(new Range(firstRow,0,lastRow+1,0)):this._removeLines(firstRow,lastRow)},this._removeLines=function(firstRow,lastRow){var range=new Range(firstRow,0,lastRow+1,0),removed=this.$lines.splice(firstRow,lastRow-firstRow+1),delta={action:\"removeLines\",range:range,nl:this.getNewLineCharacter(),lines:removed};return this._signal(\"change\",{data:delta}),removed},this.removeNewLine=function(row){var firstLine=this.getLine(row),secondLine=this.getLine(row+1),range=new Range(row,firstLine.length,row+1,0),line=firstLine+secondLine;this.$lines.splice(row,2,line);var delta={action:\"removeText\",range:range,text:this.getNewLineCharacter()};this._signal(\"change\",{data:delta})},this.replace=function(range,text){if(range instanceof Range||(range=Range.fromPoints(range.start,range.end)),0==text.length&&range.isEmpty())return range.start;if(text==this.getTextRange(range))return range.end;if(this.remove(range),text)var end=this.insert(range.start,text);else end=range.start;return end},this.applyDeltas=function(deltas){for(var i=0;deltas.length>i;i++){var delta=deltas[i],range=Range.fromPoints(delta.range.start,delta.range.end);\"insertLines\"==delta.action?this.insertLines(range.start.row,delta.lines):\"insertText\"==delta.action?this.insert(range.start,delta.text):\"removeLines\"==delta.action?this._removeLines(range.start.row,range.end.row-1):\"removeText\"==delta.action&&this.remove(range)}},this.revertDeltas=function(deltas){for(var i=deltas.length-1;i>=0;i--){var delta=deltas[i],range=Range.fromPoints(delta.range.start,delta.range.end);\"insertLines\"==delta.action?this._removeLines(range.start.row,range.end.row-1):\"insertText\"==delta.action?this.remove(range):\"removeLines\"==delta.action?this._insertLines(range.start.row,delta.lines):\"removeText\"==delta.action&&this.insert(range.start,delta.text)}},this.indexToPosition=function(index,startRow){for(var lines=this.$lines||this.getAllLines(),newlineLength=this.getNewLineCharacter().length,i=startRow||0,l=lines.length;l>i;i++)if(index-=lines[i].length+newlineLength,0>index)return{row:i,column:index+lines[i].length+newlineLength};return{row:l-1,column:lines[l-1].length}},this.positionToIndex=function(pos,startRow){for(var lines=this.$lines||this.getAllLines(),newlineLength=this.getNewLineCharacter().length,index=0,row=Math.min(pos.row,lines.length),i=startRow||0;row>i;++i)index+=lines[i].length+newlineLength;return index+pos.column}}).call(Document.prototype),exports.Document=Document}),ace.define(\"ace/lib/lang\",[\"require\",\"exports\",\"module\"],function(acequire,exports){\"use strict\";exports.last=function(a){return a[a.length-1]},exports.stringReverse=function(string){return string.split(\"\").reverse().join(\"\")},exports.stringRepeat=function(string,count){for(var result=\"\";count>0;)1&count&&(result+=string),(count>>=1)&&(string+=string);return result};var trimBeginRegexp=/^\\s\\s*/,trimEndRegexp=/\\s\\s*$/;exports.stringTrimLeft=function(string){return string.replace(trimBeginRegexp,\"\")},exports.stringTrimRight=function(string){return string.replace(trimEndRegexp,\"\")},exports.copyObject=function(obj){var copy={};for(var key in obj)copy[key]=obj[key];return copy},exports.copyArray=function(array){for(var copy=[],i=0,l=array.length;l>i;i++)copy[i]=array[i]&&\"object\"==typeof array[i]?this.copyObject(array[i]):array[i];return copy},exports.deepCopy=function(obj){if(\"object\"!=typeof obj||!obj)return obj;var cons=obj.constructor;if(cons===RegExp)return obj;var copy=cons();for(var key in obj)copy[key]=\"object\"==typeof obj[key]?exports.deepCopy(obj[key]):obj[key];return copy},exports.arrayToMap=function(arr){for(var map={},i=0;arr.length>i;i++)map[arr[i]]=1;return map},exports.createMap=function(props){var map=Object.create(null);for(var i in props)map[i]=props[i];return map},exports.arrayRemove=function(array,value){for(var i=0;array.length>=i;i++)value===array[i]&&array.splice(i,1)},exports.escapeRegExp=function(str){return str.replace(/([.*+?^${}()|[\\]\\/\\\\])/g,\"\\\\$1\")},exports.escapeHTML=function(str){return str.replace(/&/g,\"&#38;\").replace(/\"/g,\"&#34;\").replace(/'/g,\"&#39;\").replace(/</g,\"&#60;\")},exports.getMatchOffsets=function(string,regExp){var matches=[];return string.replace(regExp,function(str){matches.push({offset:arguments[arguments.length-2],length:str.length})}),matches},exports.deferredCall=function(fcn){var timer=null,callback=function(){timer=null,fcn()},deferred=function(timeout){return deferred.cancel(),timer=setTimeout(callback,timeout||0),deferred};return deferred.schedule=deferred,deferred.call=function(){return this.cancel(),fcn(),deferred},deferred.cancel=function(){return clearTimeout(timer),timer=null,deferred},deferred.isPending=function(){return timer},deferred},exports.delayedCall=function(fcn,defaultTimeout){var timer=null,callback=function(){timer=null,fcn()},_self=function(timeout){null==timer&&(timer=setTimeout(callback,timeout||defaultTimeout))};return _self.delay=function(timeout){timer&&clearTimeout(timer),timer=setTimeout(callback,timeout||defaultTimeout)},_self.schedule=_self,_self.call=function(){this.cancel(),fcn()},_self.cancel=function(){timer&&clearTimeout(timer),timer=null},_self.isPending=function(){return timer},_self}}),ace.define(\"ace/worker/mirror\",[\"require\",\"exports\",\"module\",\"ace/document\",\"ace/lib/lang\"],function(acequire,exports){\"use strict\";var Document=acequire(\"../document\").Document,lang=acequire(\"../lib/lang\"),Mirror=exports.Mirror=function(sender){this.sender=sender;var doc=this.doc=new Document(\"\"),deferredUpdate=this.deferredUpdate=lang.delayedCall(this.onUpdate.bind(this)),_self=this;sender.on(\"change\",function(e){return doc.applyDeltas(e.data),_self.$timeout?deferredUpdate.schedule(_self.$timeout):(_self.onUpdate(),void 0)})};(function(){this.$timeout=500,this.setTimeout=function(timeout){this.$timeout=timeout},this.setValue=function(value){this.doc.setValue(value),this.deferredUpdate.schedule(this.$timeout)},this.getValue=function(callbackId){this.sender.callback(this.doc.getValue(),callbackId)},this.onUpdate=function(){},this.isPending=function(){return this.deferredUpdate.isPending()}}).call(Mirror.prototype)}),ace.define(\"ace/mode/json/json_parse\",[\"require\",\"exports\",\"module\"],function(){\"use strict\";var at,ch,text,value,escapee={'\"':'\"',\"\\\\\":\"\\\\\",\"/\":\"/\",b:\"\\b\",f:\"\\f\",n:\"\\n\",r:\"\\r\",t:\"\t\"},error=function(m){throw{name:\"SyntaxError\",message:m,at:at,text:text}},next=function(c){return c&&c!==ch&&error(\"Expected '\"+c+\"' instead of '\"+ch+\"'\"),ch=text.charAt(at),at+=1,ch},number=function(){var number,string=\"\";for(\"-\"===ch&&(string=\"-\",next(\"-\"));ch>=\"0\"&&\"9\">=ch;)string+=ch,next();if(\".\"===ch)for(string+=\".\";next()&&ch>=\"0\"&&\"9\">=ch;)string+=ch;if(\"e\"===ch||\"E\"===ch)for(string+=ch,next(),(\"-\"===ch||\"+\"===ch)&&(string+=ch,next());ch>=\"0\"&&\"9\">=ch;)string+=ch,next();return number=+string,isNaN(number)?(error(\"Bad number\"),void 0):number},string=function(){var hex,i,uffff,string=\"\";if('\"'===ch)for(;next();){if('\"'===ch)return next(),string;if(\"\\\\\"===ch)if(next(),\"u\"===ch){for(uffff=0,i=0;4>i&&(hex=parseInt(next(),16),isFinite(hex));i+=1)uffff=16*uffff+hex;string+=String.fromCharCode(uffff)}else{if(\"string\"!=typeof escapee[ch])break;string+=escapee[ch]}else string+=ch}error(\"Bad string\")},white=function(){for(;ch&&\" \">=ch;)next()},word=function(){switch(ch){case\"t\":return next(\"t\"),next(\"r\"),next(\"u\"),next(\"e\"),!0;case\"f\":return next(\"f\"),next(\"a\"),next(\"l\"),next(\"s\"),next(\"e\"),!1;case\"n\":return next(\"n\"),next(\"u\"),next(\"l\"),next(\"l\"),null}error(\"Unexpected '\"+ch+\"'\")},array=function(){var array=[];if(\"[\"===ch){if(next(\"[\"),white(),\"]\"===ch)return next(\"]\"),array;for(;ch;){if(array.push(value()),white(),\"]\"===ch)return next(\"]\"),array;next(\",\"),white()}}error(\"Bad array\")},object=function(){var key,object={};if(\"{\"===ch){if(next(\"{\"),white(),\"}\"===ch)return next(\"}\"),object;for(;ch;){if(key=string(),white(),next(\":\"),Object.hasOwnProperty.call(object,key)&&error('Duplicate key \"'+key+'\"'),object[key]=value(),white(),\"}\"===ch)return next(\"}\"),object;next(\",\"),white()}}error(\"Bad object\")};return value=function(){switch(white(),ch){case\"{\":return object();case\"[\":return array();case'\"':return string();case\"-\":return number();default:return ch>=\"0\"&&\"9\">=ch?number():word()}},function(source,reviver){var result;return text=source,at=0,ch=\" \",result=value(),white(),ch&&error(\"Syntax error\"),\"function\"==typeof reviver?function walk(holder,key){var k,v,value=holder[key];if(value&&\"object\"==typeof value)for(k in value)Object.hasOwnProperty.call(value,k)&&(v=walk(value,k),void 0!==v?value[k]=v:delete value[k]);return reviver.call(holder,key,value)}({\"\":result},\"\"):result}}),ace.define(\"ace/mode/json_worker\",[\"require\",\"exports\",\"module\",\"ace/lib/oop\",\"ace/worker/mirror\",\"ace/mode/json/json_parse\"],function(acequire,exports){\"use strict\";var oop=acequire(\"../lib/oop\"),Mirror=acequire(\"../worker/mirror\").Mirror,parse=acequire(\"./json/json_parse\"),JsonWorker=exports.JsonWorker=function(sender){Mirror.call(this,sender),this.setTimeout(200)};oop.inherits(JsonWorker,Mirror),function(){this.onUpdate=function(){var value=this.doc.getValue();try{value&&parse(value)}catch(e){var pos=this.doc.indexToPosition(e.at-1);return this.sender.emit(\"error\",{row:pos.row,column:pos.column,text:e.message,type:\"error\"}),void 0}this.sender.emit(\"ok\")}}.call(JsonWorker.prototype)}),ace.define(\"ace/lib/es5-shim\",[\"require\",\"exports\",\"module\"],function(){function Empty(){}function doesDefinePropertyWork(object){try{return Object.defineProperty(object,\"sentinel\",{}),\"sentinel\"in object}catch(exception){}}function toInteger(n){return n=+n,n!==n?n=0:0!==n&&n!==1/0&&n!==-(1/0)&&(n=(n>0||-1)*Math.floor(Math.abs(n))),n}Function.prototype.bind||(Function.prototype.bind=function(that){var target=this;if(\"function\"!=typeof target)throw new TypeError(\"Function.prototype.bind called on incompatible \"+target);var args=slice.call(arguments,1),bound=function(){if(this instanceof bound){var result=target.apply(this,args.concat(slice.call(arguments)));return Object(result)===result?result:this}return target.apply(that,args.concat(slice.call(arguments)))};return target.prototype&&(Empty.prototype=target.prototype,bound.prototype=new Empty,Empty.prototype=null),bound});var defineGetter,defineSetter,lookupGetter,lookupSetter,supportsAccessors,call=Function.prototype.call,prototypeOfArray=Array.prototype,prototypeOfObject=Object.prototype,slice=prototypeOfArray.slice,_toString=call.bind(prototypeOfObject.toString),owns=call.bind(prototypeOfObject.hasOwnProperty);if((supportsAccessors=owns(prototypeOfObject,\"__defineGetter__\"))&&(defineGetter=call.bind(prototypeOfObject.__defineGetter__),defineSetter=call.bind(prototypeOfObject.__defineSetter__),lookupGetter=call.bind(prototypeOfObject.__lookupGetter__),lookupSetter=call.bind(prototypeOfObject.__lookupSetter__)),2!=[1,2].splice(0).length)if(function(){function makeArray(l){var a=Array(l+2);return a[0]=a[1]=0,a}var lengthBefore,array=[];return array.splice.apply(array,makeArray(20)),array.splice.apply(array,makeArray(26)),lengthBefore=array.length,array.splice(5,0,\"XXX\"),lengthBefore+1==array.length,lengthBefore+1==array.length?!0:void 0}()){var array_splice=Array.prototype.splice;Array.prototype.splice=function(start,deleteCount){return arguments.length?array_splice.apply(this,[void 0===start?0:start,void 0===deleteCount?this.length-start:deleteCount].concat(slice.call(arguments,2))):[]}}else Array.prototype.splice=function(pos,removeCount){var length=this.length;pos>0?pos>length&&(pos=length):void 0==pos?pos=0:0>pos&&(pos=Math.max(length+pos,0)),length>pos+removeCount||(removeCount=length-pos);var removed=this.slice(pos,pos+removeCount),insert=slice.call(arguments,2),add=insert.length;if(pos===length)add&&this.push.apply(this,insert);else{var remove=Math.min(removeCount,length-pos),tailOldPos=pos+remove,tailNewPos=tailOldPos+add-remove,tailCount=length-tailOldPos,lengthAfterRemove=length-remove;if(tailOldPos>tailNewPos)for(var i=0;tailCount>i;++i)this[tailNewPos+i]=this[tailOldPos+i];else if(tailNewPos>tailOldPos)for(i=tailCount;i--;)this[tailNewPos+i]=this[tailOldPos+i];if(add&&pos===lengthAfterRemove)this.length=lengthAfterRemove,this.push.apply(this,insert);else for(this.length=lengthAfterRemove+add,i=0;add>i;++i)this[pos+i]=insert[i]}return removed};Array.isArray||(Array.isArray=function(obj){return\"[object Array]\"==_toString(obj)});var boxedString=Object(\"a\"),splitString=\"a\"!=boxedString[0]||!(0 in boxedString);if(Array.prototype.forEach||(Array.prototype.forEach=function(fun){var object=toObject(this),self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):object,thisp=arguments[1],i=-1,length=self.length>>>0;if(\"[object Function]\"!=_toString(fun))throw new TypeError;\nfor(;length>++i;)i in self&&fun.call(thisp,self[i],i,object)}),Array.prototype.map||(Array.prototype.map=function(fun){var object=toObject(this),self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):object,length=self.length>>>0,result=Array(length),thisp=arguments[1];if(\"[object Function]\"!=_toString(fun))throw new TypeError(fun+\" is not a function\");for(var i=0;length>i;i++)i in self&&(result[i]=fun.call(thisp,self[i],i,object));return result}),Array.prototype.filter||(Array.prototype.filter=function(fun){var value,object=toObject(this),self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):object,length=self.length>>>0,result=[],thisp=arguments[1];if(\"[object Function]\"!=_toString(fun))throw new TypeError(fun+\" is not a function\");for(var i=0;length>i;i++)i in self&&(value=self[i],fun.call(thisp,value,i,object)&&result.push(value));return result}),Array.prototype.every||(Array.prototype.every=function(fun){var object=toObject(this),self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):object,length=self.length>>>0,thisp=arguments[1];if(\"[object Function]\"!=_toString(fun))throw new TypeError(fun+\" is not a function\");for(var i=0;length>i;i++)if(i in self&&!fun.call(thisp,self[i],i,object))return!1;return!0}),Array.prototype.some||(Array.prototype.some=function(fun){var object=toObject(this),self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):object,length=self.length>>>0,thisp=arguments[1];if(\"[object Function]\"!=_toString(fun))throw new TypeError(fun+\" is not a function\");for(var i=0;length>i;i++)if(i in self&&fun.call(thisp,self[i],i,object))return!0;return!1}),Array.prototype.reduce||(Array.prototype.reduce=function(fun){var object=toObject(this),self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):object,length=self.length>>>0;if(\"[object Function]\"!=_toString(fun))throw new TypeError(fun+\" is not a function\");if(!length&&1==arguments.length)throw new TypeError(\"reduce of empty array with no initial value\");var result,i=0;if(arguments.length>=2)result=arguments[1];else for(;;){if(i in self){result=self[i++];break}if(++i>=length)throw new TypeError(\"reduce of empty array with no initial value\")}for(;length>i;i++)i in self&&(result=fun.call(void 0,result,self[i],i,object));return result}),Array.prototype.reduceRight||(Array.prototype.reduceRight=function(fun){var object=toObject(this),self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):object,length=self.length>>>0;if(\"[object Function]\"!=_toString(fun))throw new TypeError(fun+\" is not a function\");if(!length&&1==arguments.length)throw new TypeError(\"reduceRight of empty array with no initial value\");var result,i=length-1;if(arguments.length>=2)result=arguments[1];else for(;;){if(i in self){result=self[i--];break}if(0>--i)throw new TypeError(\"reduceRight of empty array with no initial value\")}do i in this&&(result=fun.call(void 0,result,self[i],i,object));while(i--);return result}),Array.prototype.indexOf&&-1==[0,1].indexOf(1,2)||(Array.prototype.indexOf=function(sought){var self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):toObject(this),length=self.length>>>0;if(!length)return-1;var i=0;for(arguments.length>1&&(i=toInteger(arguments[1])),i=i>=0?i:Math.max(0,length+i);length>i;i++)if(i in self&&self[i]===sought)return i;return-1}),Array.prototype.lastIndexOf&&-1==[0,1].lastIndexOf(0,-3)||(Array.prototype.lastIndexOf=function(sought){var self=splitString&&\"[object String]\"==_toString(this)?this.split(\"\"):toObject(this),length=self.length>>>0;if(!length)return-1;var i=length-1;for(arguments.length>1&&(i=Math.min(i,toInteger(arguments[1]))),i=i>=0?i:length-Math.abs(i);i>=0;i--)if(i in self&&sought===self[i])return i;return-1}),Object.getPrototypeOf||(Object.getPrototypeOf=function(object){return object.__proto__||(object.constructor?object.constructor.prototype:prototypeOfObject)}),!Object.getOwnPropertyDescriptor){var ERR_NON_OBJECT=\"Object.getOwnPropertyDescriptor called on a non-object: \";Object.getOwnPropertyDescriptor=function(object,property){if(\"object\"!=typeof object&&\"function\"!=typeof object||null===object)throw new TypeError(ERR_NON_OBJECT+object);if(owns(object,property)){var descriptor,getter,setter;if(descriptor={enumerable:!0,configurable:!0},supportsAccessors){var prototype=object.__proto__;object.__proto__=prototypeOfObject;var getter=lookupGetter(object,property),setter=lookupSetter(object,property);if(object.__proto__=prototype,getter||setter)return getter&&(descriptor.get=getter),setter&&(descriptor.set=setter),descriptor}return descriptor.value=object[property],descriptor}}}if(Object.getOwnPropertyNames||(Object.getOwnPropertyNames=function(object){return Object.keys(object)}),!Object.create){var createEmpty;createEmpty=null===Object.prototype.__proto__?function(){return{__proto__:null}}:function(){var empty={};for(var i in empty)empty[i]=null;return empty.constructor=empty.hasOwnProperty=empty.propertyIsEnumerable=empty.isPrototypeOf=empty.toLocaleString=empty.toString=empty.valueOf=empty.__proto__=null,empty},Object.create=function(prototype,properties){var object;if(null===prototype)object=createEmpty();else{if(\"object\"!=typeof prototype)throw new TypeError(\"typeof prototype[\"+typeof prototype+\"] != 'object'\");var Type=function(){};Type.prototype=prototype,object=new Type,object.__proto__=prototype}return void 0!==properties&&Object.defineProperties(object,properties),object}}if(Object.defineProperty){var definePropertyWorksOnObject=doesDefinePropertyWork({}),definePropertyWorksOnDom=\"undefined\"==typeof document||doesDefinePropertyWork(document.createElement(\"div\"));if(!definePropertyWorksOnObject||!definePropertyWorksOnDom)var definePropertyFallback=Object.defineProperty}if(!Object.defineProperty||definePropertyFallback){var ERR_NON_OBJECT_DESCRIPTOR=\"Property description must be an object: \",ERR_NON_OBJECT_TARGET=\"Object.defineProperty called on non-object: \",ERR_ACCESSORS_NOT_SUPPORTED=\"getters & setters can not be defined on this javascript engine\";Object.defineProperty=function(object,property,descriptor){if(\"object\"!=typeof object&&\"function\"!=typeof object||null===object)throw new TypeError(ERR_NON_OBJECT_TARGET+object);if(\"object\"!=typeof descriptor&&\"function\"!=typeof descriptor||null===descriptor)throw new TypeError(ERR_NON_OBJECT_DESCRIPTOR+descriptor);if(definePropertyFallback)try{return definePropertyFallback.call(Object,object,property,descriptor)}catch(exception){}if(owns(descriptor,\"value\"))if(supportsAccessors&&(lookupGetter(object,property)||lookupSetter(object,property))){var prototype=object.__proto__;object.__proto__=prototypeOfObject,delete object[property],object[property]=descriptor.value,object.__proto__=prototype}else object[property]=descriptor.value;else{if(!supportsAccessors)throw new TypeError(ERR_ACCESSORS_NOT_SUPPORTED);owns(descriptor,\"get\")&&defineGetter(object,property,descriptor.get),owns(descriptor,\"set\")&&defineSetter(object,property,descriptor.set)}return object}}Object.defineProperties||(Object.defineProperties=function(object,properties){for(var property in properties)owns(properties,property)&&Object.defineProperty(object,property,properties[property]);return object}),Object.seal||(Object.seal=function(object){return object}),Object.freeze||(Object.freeze=function(object){return object});try{Object.freeze(function(){})}catch(exception){Object.freeze=function(freezeObject){return function(object){return\"function\"==typeof object?object:freezeObject(object)}}(Object.freeze)}if(Object.preventExtensions||(Object.preventExtensions=function(object){return object}),Object.isSealed||(Object.isSealed=function(){return!1}),Object.isFrozen||(Object.isFrozen=function(){return!1}),Object.isExtensible||(Object.isExtensible=function(object){if(Object(object)===object)throw new TypeError;for(var name=\"\";owns(object,name);)name+=\"?\";object[name]=!0;var returnValue=owns(object,name);return delete object[name],returnValue}),!Object.keys){var hasDontEnumBug=!0,dontEnums=[\"toString\",\"toLocaleString\",\"valueOf\",\"hasOwnProperty\",\"isPrototypeOf\",\"propertyIsEnumerable\",\"constructor\"],dontEnumsLength=dontEnums.length;for(var key in{toString:null})hasDontEnumBug=!1;Object.keys=function(object){if(\"object\"!=typeof object&&\"function\"!=typeof object||null===object)throw new TypeError(\"Object.keys called on a non-object\");var keys=[];for(var name in object)owns(object,name)&&keys.push(name);if(hasDontEnumBug)for(var i=0,ii=dontEnumsLength;ii>i;i++){var dontEnum=dontEnums[i];owns(object,dontEnum)&&keys.push(dontEnum)}return keys}}Date.now||(Date.now=function(){return(new Date).getTime()});var ws=\"\t\\n\u000b\\f\\r   ᠎             　\\u2028\\u2029﻿\";if(!String.prototype.trim||ws.trim()){ws=\"[\"+ws+\"]\";var trimBeginRegexp=RegExp(\"^\"+ws+ws+\"*\"),trimEndRegexp=RegExp(ws+ws+\"*$\");String.prototype.trim=function(){return(this+\"\").replace(trimBeginRegexp,\"\").replace(trimEndRegexp,\"\")}}var toObject=function(o){if(null==o)throw new TypeError(\"can't convert \"+o+\" to object\");return Object(o)}});";
-
-/***/ },
-/* 18 */
-/***/ function(module, exports, __webpack_require__) {
-
-	module.exports = function() { throw new Error("define cannot be used indirect"); };
-
-
-/***/ },
 /* 19 */
-/***/ function(module, exports, __webpack_require__) {
+/***/ function(module, exports) {
 
-	/* WEBPACK VAR INJECTION */(function(global) {module.exports = get_blob()
+	ace.define("ace/snippets",["require","exports","module","ace/lib/oop","ace/lib/event_emitter","ace/lib/lang","ace/range","ace/anchor","ace/keyboard/hash_handler","ace/tokenizer","ace/lib/dom","ace/editor"], function(acequire, exports, module) {
+	"use strict";
+	var oop = acequire("./lib/oop");
+	var EventEmitter = acequire("./lib/event_emitter").EventEmitter;
+	var lang = acequire("./lib/lang");
+	var Range = acequire("./range").Range;
+	var Anchor = acequire("./anchor").Anchor;
+	var HashHandler = acequire("./keyboard/hash_handler").HashHandler;
+	var Tokenizer = acequire("./tokenizer").Tokenizer;
+	var comparePoints = Range.comparePoints;
 
-	function get_blob() {
-	  if(global.Blob) {
-	    try {
-	      new Blob(['asdf'], {type: 'text/plain'})
-	      return Blob
-	    } catch(err) {}
-	  }
+	var SnippetManager = function() {
+	    this.snippetMap = {};
+	    this.snippetNameMap = {};
+	};
 
-	  var Builder = global.WebKitBlobBuilder ||
-	                global.MozBlobBuilder ||
-	                global.MSBlobBuilder
+	(function() {
+	    oop.implement(this, EventEmitter);
+	    
+	    this.getTokenizer = function() {
+	        function TabstopToken(str, _, stack) {
+	            str = str.substr(1);
+	            if (/^\d+$/.test(str) && !stack.inFormatString)
+	                return [{tabstopId: parseInt(str, 10)}];
+	            return [{text: str}];
+	        }
+	        function escape(ch) {
+	            return "(?:[^\\\\" + ch + "]|\\\\.)";
+	        }
+	        SnippetManager.$tokenizer = new Tokenizer({
+	            start: [
+	                {regex: /:/, onMatch: function(val, state, stack) {
+	                    if (stack.length && stack[0].expectIf) {
+	                        stack[0].expectIf = false;
+	                        stack[0].elseBranch = stack[0];
+	                        return [stack[0]];
+	                    }
+	                    return ":";
+	                }},
+	                {regex: /\\./, onMatch: function(val, state, stack) {
+	                    var ch = val[1];
+	                    if (ch == "}" && stack.length) {
+	                        val = ch;
+	                    }else if ("`$\\".indexOf(ch) != -1) {
+	                        val = ch;
+	                    } else if (stack.inFormatString) {
+	                        if (ch == "n")
+	                            val = "\n";
+	                        else if (ch == "t")
+	                            val = "\n";
+	                        else if ("ulULE".indexOf(ch) != -1) {
+	                            val = {changeCase: ch, local: ch > "a"};
+	                        }
+	                    }
 
-	  return function(parts, bag) {
-	    var builder = new Builder
-	      , endings = bag.endings
-	      , type = bag.type
+	                    return [val];
+	                }},
+	                {regex: /}/, onMatch: function(val, state, stack) {
+	                    return [stack.length ? stack.shift() : val];
+	                }},
+	                {regex: /\$(?:\d+|\w+)/, onMatch: TabstopToken},
+	                {regex: /\$\{[\dA-Z_a-z]+/, onMatch: function(str, state, stack) {
+	                    var t = TabstopToken(str.substr(1), state, stack);
+	                    stack.unshift(t[0]);
+	                    return t;
+	                }, next: "snippetVar"},
+	                {regex: /\n/, token: "newline", merge: false}
+	            ],
+	            snippetVar: [
+	                {regex: "\\|" + escape("\\|") + "*\\|", onMatch: function(val, state, stack) {
+	                    stack[0].choices = val.slice(1, -1).split(",");
+	                }, next: "start"},
+	                {regex: "/(" + escape("/") + "+)/(?:(" + escape("/") + "*)/)(\\w*):?",
+	                 onMatch: function(val, state, stack) {
+	                    var ts = stack[0];
+	                    ts.fmtString = val;
 
-	    if(endings) for(var i = 0, len = parts.length; i < len; ++i) {
-	      builder.append(parts[i], endings)
-	    } else for(var i = 0, len = parts.length; i < len; ++i) {
-	      builder.append(parts[i])
+	                    val = this.splitRegex.exec(val);
+	                    ts.guard = val[1];
+	                    ts.fmt = val[2];
+	                    ts.flag = val[3];
+	                    return "";
+	                }, next: "start"},
+	                {regex: "`" + escape("`") + "*`", onMatch: function(val, state, stack) {
+	                    stack[0].code = val.splice(1, -1);
+	                    return "";
+	                }, next: "start"},
+	                {regex: "\\?", onMatch: function(val, state, stack) {
+	                    if (stack[0])
+	                        stack[0].expectIf = true;
+	                }, next: "start"},
+	                {regex: "([^:}\\\\]|\\\\.)*:?", token: "", next: "start"}
+	            ],
+	            formatString: [
+	                {regex: "/(" + escape("/") + "+)/", token: "regex"},
+	                {regex: "", onMatch: function(val, state, stack) {
+	                    stack.inFormatString = true;
+	                }, next: "start"}
+	            ]
+	        });
+	        SnippetManager.prototype.getTokenizer = function() {
+	            return SnippetManager.$tokenizer;
+	        };
+	        return SnippetManager.$tokenizer;
+	    };
+
+	    this.tokenizeTmSnippet = function(str, startState) {
+	        return this.getTokenizer().getLineTokens(str, startState).tokens.map(function(x) {
+	            return x.value || x;
+	        });
+	    };
+
+	    this.$getDefaultValue = function(editor, name) {
+	        if (/^[A-Z]\d+$/.test(name)) {
+	            var i = name.substr(1);
+	            return (this.variables[name[0] + "__"] || {})[i];
+	        }
+	        if (/^\d+$/.test(name)) {
+	            return (this.variables.__ || {})[name];
+	        }
+	        name = name.replace(/^TM_/, "");
+
+	        if (!editor)
+	            return;
+	        var s = editor.session;
+	        switch(name) {
+	            case "CURRENT_WORD":
+	                var r = s.getWordRange();
+	            case "SELECTION":
+	            case "SELECTED_TEXT":
+	                return s.getTextRange(r);
+	            case "CURRENT_LINE":
+	                return s.getLine(editor.getCursorPosition().row);
+	            case "PREV_LINE": // not possible in textmate
+	                return s.getLine(editor.getCursorPosition().row - 1);
+	            case "LINE_INDEX":
+	                return editor.getCursorPosition().column;
+	            case "LINE_NUMBER":
+	                return editor.getCursorPosition().row + 1;
+	            case "SOFT_TABS":
+	                return s.getUseSoftTabs() ? "YES" : "NO";
+	            case "TAB_SIZE":
+	                return s.getTabSize();
+	            case "FILENAME":
+	            case "FILEPATH":
+	                return "";
+	            case "FULLNAME":
+	                return "Ace";
+	        }
+	    };
+	    this.variables = {};
+	    this.getVariableValue = function(editor, varName) {
+	        if (this.variables.hasOwnProperty(varName))
+	            return this.variables[varName](editor, varName) || "";
+	        return this.$getDefaultValue(editor, varName) || "";
+	    };
+	    this.tmStrFormat = function(str, ch, editor) {
+	        var flag = ch.flag || "";
+	        var re = ch.guard;
+	        re = new RegExp(re, flag.replace(/[^gi]/, ""));
+	        var fmtTokens = this.tokenizeTmSnippet(ch.fmt, "formatString");
+	        var _self = this;
+	        var formatted = str.replace(re, function() {
+	            _self.variables.__ = arguments;
+	            var fmtParts = _self.resolveVariables(fmtTokens, editor);
+	            var gChangeCase = "E";
+	            for (var i  = 0; i < fmtParts.length; i++) {
+	                var ch = fmtParts[i];
+	                if (typeof ch == "object") {
+	                    fmtParts[i] = "";
+	                    if (ch.changeCase && ch.local) {
+	                        var next = fmtParts[i + 1];
+	                        if (next && typeof next == "string") {
+	                            if (ch.changeCase == "u")
+	                                fmtParts[i] = next[0].toUpperCase();
+	                            else
+	                                fmtParts[i] = next[0].toLowerCase();
+	                            fmtParts[i + 1] = next.substr(1);
+	                        }
+	                    } else if (ch.changeCase) {
+	                        gChangeCase = ch.changeCase;
+	                    }
+	                } else if (gChangeCase == "U") {
+	                    fmtParts[i] = ch.toUpperCase();
+	                } else if (gChangeCase == "L") {
+	                    fmtParts[i] = ch.toLowerCase();
+	                }
+	            }
+	            return fmtParts.join("");
+	        });
+	        this.variables.__ = null;
+	        return formatted;
+	    };
+
+	    this.resolveVariables = function(snippet, editor) {
+	        var result = [];
+	        for (var i = 0; i < snippet.length; i++) {
+	            var ch = snippet[i];
+	            if (typeof ch == "string") {
+	                result.push(ch);
+	            } else if (typeof ch != "object") {
+	                continue;
+	            } else if (ch.skip) {
+	                gotoNext(ch);
+	            } else if (ch.processed < i) {
+	                continue;
+	            } else if (ch.text) {
+	                var value = this.getVariableValue(editor, ch.text);
+	                if (value && ch.fmtString)
+	                    value = this.tmStrFormat(value, ch);
+	                ch.processed = i;
+	                if (ch.expectIf == null) {
+	                    if (value) {
+	                        result.push(value);
+	                        gotoNext(ch);
+	                    }
+	                } else {
+	                    if (value) {
+	                        ch.skip = ch.elseBranch;
+	                    } else
+	                        gotoNext(ch);
+	                }
+	            } else if (ch.tabstopId != null) {
+	                result.push(ch);
+	            } else if (ch.changeCase != null) {
+	                result.push(ch);
+	            }
+	        }
+	        function gotoNext(ch) {
+	            var i1 = snippet.indexOf(ch, i + 1);
+	            if (i1 != -1)
+	                i = i1;
+	        }
+	        return result;
+	    };
+
+	    this.insertSnippetForSelection = function(editor, snippetText) {
+	        var cursor = editor.getCursorPosition();
+	        var line = editor.session.getLine(cursor.row);
+	        var tabString = editor.session.getTabString();
+	        var indentString = line.match(/^\s*/)[0];
+	        
+	        if (cursor.column < indentString.length)
+	            indentString = indentString.slice(0, cursor.column);
+
+	        var tokens = this.tokenizeTmSnippet(snippetText);
+	        tokens = this.resolveVariables(tokens, editor);
+	        tokens = tokens.map(function(x) {
+	            if (x == "\n")
+	                return x + indentString;
+	            if (typeof x == "string")
+	                return x.replace(/\t/g, tabString);
+	            return x;
+	        });
+	        var tabstops = [];
+	        tokens.forEach(function(p, i) {
+	            if (typeof p != "object")
+	                return;
+	            var id = p.tabstopId;
+	            var ts = tabstops[id];
+	            if (!ts) {
+	                ts = tabstops[id] = [];
+	                ts.index = id;
+	                ts.value = "";
+	            }
+	            if (ts.indexOf(p) !== -1)
+	                return;
+	            ts.push(p);
+	            var i1 = tokens.indexOf(p, i + 1);
+	            if (i1 === -1)
+	                return;
+
+	            var value = tokens.slice(i + 1, i1);
+	            var isNested = value.some(function(t) {return typeof t === "object"});          
+	            if (isNested && !ts.value) {
+	                ts.value = value;
+	            } else if (value.length && (!ts.value || typeof ts.value !== "string")) {
+	                ts.value = value.join("");
+	            }
+	        });
+	        tabstops.forEach(function(ts) {ts.length = 0});
+	        var expanding = {};
+	        function copyValue(val) {
+	            var copy = [];
+	            for (var i = 0; i < val.length; i++) {
+	                var p = val[i];
+	                if (typeof p == "object") {
+	                    if (expanding[p.tabstopId])
+	                        continue;
+	                    var j = val.lastIndexOf(p, i - 1);
+	                    p = copy[j] || {tabstopId: p.tabstopId};
+	                }
+	                copy[i] = p;
+	            }
+	            return copy;
+	        }
+	        for (var i = 0; i < tokens.length; i++) {
+	            var p = tokens[i];
+	            if (typeof p != "object")
+	                continue;
+	            var id = p.tabstopId;
+	            var i1 = tokens.indexOf(p, i + 1);
+	            if (expanding[id]) {
+	                if (expanding[id] === p)
+	                    expanding[id] = null;
+	                continue;
+	            }
+	            
+	            var ts = tabstops[id];
+	            var arg = typeof ts.value == "string" ? [ts.value] : copyValue(ts.value);
+	            arg.unshift(i + 1, Math.max(0, i1 - i));
+	            arg.push(p);
+	            expanding[id] = p;
+	            tokens.splice.apply(tokens, arg);
+
+	            if (ts.indexOf(p) === -1)
+	                ts.push(p);
+	        }
+	        var row = 0, column = 0;
+	        var text = "";
+	        tokens.forEach(function(t) {
+	            if (typeof t === "string") {
+	                if (t[0] === "\n"){
+	                    column = t.length - 1;
+	                    row ++;
+	                } else
+	                    column += t.length;
+	                text += t;
+	            } else {
+	                if (!t.start)
+	                    t.start = {row: row, column: column};
+	                else
+	                    t.end = {row: row, column: column};
+	            }
+	        });
+	        var range = editor.getSelectionRange();
+	        var end = editor.session.replace(range, text);
+
+	        var tabstopManager = new TabstopManager(editor);
+	        var selectionId = editor.inVirtualSelectionMode && editor.selection.index;
+	        tabstopManager.addTabstops(tabstops, range.start, end, selectionId);
+	    };
+	    
+	    this.insertSnippet = function(editor, snippetText) {
+	        var self = this;
+	        if (editor.inVirtualSelectionMode)
+	            return self.insertSnippetForSelection(editor, snippetText);
+	        
+	        editor.forEachSelection(function() {
+	            self.insertSnippetForSelection(editor, snippetText);
+	        }, null, {keepOrder: true});
+	        
+	        if (editor.tabstopManager)
+	            editor.tabstopManager.tabNext();
+	    };
+
+	    this.$getScope = function(editor) {
+	        var scope = editor.session.$mode.$id || "";
+	        scope = scope.split("/").pop();
+	        if (scope === "html" || scope === "php") {
+	            if (scope === "php" && !editor.session.$mode.inlinePhp) 
+	                scope = "html";
+	            var c = editor.getCursorPosition();
+	            var state = editor.session.getState(c.row);
+	            if (typeof state === "object") {
+	                state = state[0];
+	            }
+	            if (state.substring) {
+	                if (state.substring(0, 3) == "js-")
+	                    scope = "javascript";
+	                else if (state.substring(0, 4) == "css-")
+	                    scope = "css";
+	                else if (state.substring(0, 4) == "php-")
+	                    scope = "php";
+	            }
+	        }
+	        
+	        return scope;
+	    };
+
+	    this.getActiveScopes = function(editor) {
+	        var scope = this.$getScope(editor);
+	        var scopes = [scope];
+	        var snippetMap = this.snippetMap;
+	        if (snippetMap[scope] && snippetMap[scope].includeScopes) {
+	            scopes.push.apply(scopes, snippetMap[scope].includeScopes);
+	        }
+	        scopes.push("_");
+	        return scopes;
+	    };
+
+	    this.expandWithTab = function(editor, options) {
+	        var self = this;
+	        var result = editor.forEachSelection(function() {
+	            return self.expandSnippetForSelection(editor, options);
+	        }, null, {keepOrder: true});
+	        if (result && editor.tabstopManager)
+	            editor.tabstopManager.tabNext();
+	        return result;
+	    };
+	    
+	    this.expandSnippetForSelection = function(editor, options) {
+	        var cursor = editor.getCursorPosition();
+	        var line = editor.session.getLine(cursor.row);
+	        var before = line.substring(0, cursor.column);
+	        var after = line.substr(cursor.column);
+
+	        var snippetMap = this.snippetMap;
+	        var snippet;
+	        this.getActiveScopes(editor).some(function(scope) {
+	            var snippets = snippetMap[scope];
+	            if (snippets)
+	                snippet = this.findMatchingSnippet(snippets, before, after);
+	            return !!snippet;
+	        }, this);
+	        if (!snippet)
+	            return false;
+	        if (options && options.dryRun)
+	            return true;
+	        editor.session.doc.removeInLine(cursor.row,
+	            cursor.column - snippet.replaceBefore.length,
+	            cursor.column + snippet.replaceAfter.length
+	        );
+
+	        this.variables.M__ = snippet.matchBefore;
+	        this.variables.T__ = snippet.matchAfter;
+	        this.insertSnippetForSelection(editor, snippet.content);
+
+	        this.variables.M__ = this.variables.T__ = null;
+	        return true;
+	    };
+
+	    this.findMatchingSnippet = function(snippetList, before, after) {
+	        for (var i = snippetList.length; i--;) {
+	            var s = snippetList[i];
+	            if (s.startRe && !s.startRe.test(before))
+	                continue;
+	            if (s.endRe && !s.endRe.test(after))
+	                continue;
+	            if (!s.startRe && !s.endRe)
+	                continue;
+
+	            s.matchBefore = s.startRe ? s.startRe.exec(before) : [""];
+	            s.matchAfter = s.endRe ? s.endRe.exec(after) : [""];
+	            s.replaceBefore = s.triggerRe ? s.triggerRe.exec(before)[0] : "";
+	            s.replaceAfter = s.endTriggerRe ? s.endTriggerRe.exec(after)[0] : "";
+	            return s;
+	        }
+	    };
+
+	    this.snippetMap = {};
+	    this.snippetNameMap = {};
+	    this.register = function(snippets, scope) {
+	        var snippetMap = this.snippetMap;
+	        var snippetNameMap = this.snippetNameMap;
+	        var self = this;
+	        
+	        if (!snippets) 
+	            snippets = [];
+	        
+	        function wrapRegexp(src) {
+	            if (src && !/^\^?\(.*\)\$?$|^\\b$/.test(src))
+	                src = "(?:" + src + ")";
+
+	            return src || "";
+	        }
+	        function guardedRegexp(re, guard, opening) {
+	            re = wrapRegexp(re);
+	            guard = wrapRegexp(guard);
+	            if (opening) {
+	                re = guard + re;
+	                if (re && re[re.length - 1] != "$")
+	                    re = re + "$";
+	            } else {
+	                re = re + guard;
+	                if (re && re[0] != "^")
+	                    re = "^" + re;
+	            }
+	            return new RegExp(re);
+	        }
+
+	        function addSnippet(s) {
+	            if (!s.scope)
+	                s.scope = scope || "_";
+	            scope = s.scope;
+	            if (!snippetMap[scope]) {
+	                snippetMap[scope] = [];
+	                snippetNameMap[scope] = {};
+	            }
+
+	            var map = snippetNameMap[scope];
+	            if (s.name) {
+	                var old = map[s.name];
+	                if (old)
+	                    self.unregister(old);
+	                map[s.name] = s;
+	            }
+	            snippetMap[scope].push(s);
+
+	            if (s.tabTrigger && !s.trigger) {
+	                if (!s.guard && /^\w/.test(s.tabTrigger))
+	                    s.guard = "\\b";
+	                s.trigger = lang.escapeRegExp(s.tabTrigger);
+	            }
+
+	            s.startRe = guardedRegexp(s.trigger, s.guard, true);
+	            s.triggerRe = new RegExp(s.trigger, "", true);
+
+	            s.endRe = guardedRegexp(s.endTrigger, s.endGuard, true);
+	            s.endTriggerRe = new RegExp(s.endTrigger, "", true);
+	        }
+
+	        if (snippets && snippets.content)
+	            addSnippet(snippets);
+	        else if (Array.isArray(snippets))
+	            snippets.forEach(addSnippet);
+	        
+	        this._signal("registerSnippets", {scope: scope});
+	    };
+	    this.unregister = function(snippets, scope) {
+	        var snippetMap = this.snippetMap;
+	        var snippetNameMap = this.snippetNameMap;
+
+	        function removeSnippet(s) {
+	            var nameMap = snippetNameMap[s.scope||scope];
+	            if (nameMap && nameMap[s.name]) {
+	                delete nameMap[s.name];
+	                var map = snippetMap[s.scope||scope];
+	                var i = map && map.indexOf(s);
+	                if (i >= 0)
+	                    map.splice(i, 1);
+	            }
+	        }
+	        if (snippets.content)
+	            removeSnippet(snippets);
+	        else if (Array.isArray(snippets))
+	            snippets.forEach(removeSnippet);
+	    };
+	    this.parseSnippetFile = function(str) {
+	        str = str.replace(/\r/g, "");
+	        var list = [], snippet = {};
+	        var re = /^#.*|^({[\s\S]*})\s*$|^(\S+) (.*)$|^((?:\n*\t.*)+)/gm;
+	        var m;
+	        while (m = re.exec(str)) {
+	            if (m[1]) {
+	                try {
+	                    snippet = JSON.parse(m[1]);
+	                    list.push(snippet);
+	                } catch (e) {}
+	            } if (m[4]) {
+	                snippet.content = m[4].replace(/^\t/gm, "");
+	                list.push(snippet);
+	                snippet = {};
+	            } else {
+	                var key = m[2], val = m[3];
+	                if (key == "regex") {
+	                    var guardRe = /\/((?:[^\/\\]|\\.)*)|$/g;
+	                    snippet.guard = guardRe.exec(val)[1];
+	                    snippet.trigger = guardRe.exec(val)[1];
+	                    snippet.endTrigger = guardRe.exec(val)[1];
+	                    snippet.endGuard = guardRe.exec(val)[1];
+	                } else if (key == "snippet") {
+	                    snippet.tabTrigger = val.match(/^\S*/)[0];
+	                    if (!snippet.name)
+	                        snippet.name = val;
+	                } else {
+	                    snippet[key] = val;
+	                }
+	            }
+	        }
+	        return list;
+	    };
+	    this.getSnippetByName = function(name, editor) {
+	        var snippetMap = this.snippetNameMap;
+	        var snippet;
+	        this.getActiveScopes(editor).some(function(scope) {
+	            var snippets = snippetMap[scope];
+	            if (snippets)
+	                snippet = snippets[name];
+	            return !!snippet;
+	        }, this);
+	        return snippet;
+	    };
+
+	}).call(SnippetManager.prototype);
+
+
+	var TabstopManager = function(editor) {
+	    if (editor.tabstopManager)
+	        return editor.tabstopManager;
+	    editor.tabstopManager = this;
+	    this.$onChange = this.onChange.bind(this);
+	    this.$onChangeSelection = lang.delayedCall(this.onChangeSelection.bind(this)).schedule;
+	    this.$onChangeSession = this.onChangeSession.bind(this);
+	    this.$onAfterExec = this.onAfterExec.bind(this);
+	    this.attach(editor);
+	};
+	(function() {
+	    this.attach = function(editor) {
+	        this.index = 0;
+	        this.ranges = [];
+	        this.tabstops = [];
+	        this.$openTabstops = null;
+	        this.selectedTabstop = null;
+
+	        this.editor = editor;
+	        this.editor.on("change", this.$onChange);
+	        this.editor.on("changeSelection", this.$onChangeSelection);
+	        this.editor.on("changeSession", this.$onChangeSession);
+	        this.editor.commands.on("afterExec", this.$onAfterExec);
+	        this.editor.keyBinding.addKeyboardHandler(this.keyboardHandler);
+	    };
+	    this.detach = function() {
+	        this.tabstops.forEach(this.removeTabstopMarkers, this);
+	        this.ranges = null;
+	        this.tabstops = null;
+	        this.selectedTabstop = null;
+	        this.editor.removeListener("change", this.$onChange);
+	        this.editor.removeListener("changeSelection", this.$onChangeSelection);
+	        this.editor.removeListener("changeSession", this.$onChangeSession);
+	        this.editor.commands.removeListener("afterExec", this.$onAfterExec);
+	        this.editor.keyBinding.removeKeyboardHandler(this.keyboardHandler);
+	        this.editor.tabstopManager = null;
+	        this.editor = null;
+	    };
+
+	    this.onChange = function(e) {
+	        var changeRange = e.data.range;
+	        var isRemove = e.data.action[0] == "r";
+	        var start = changeRange.start;
+	        var end = changeRange.end;
+	        var startRow = start.row;
+	        var endRow = end.row;
+	        var lineDif = endRow - startRow;
+	        var colDiff = end.column - start.column;
+
+	        if (isRemove) {
+	            lineDif = -lineDif;
+	            colDiff = -colDiff;
+	        }
+	        if (!this.$inChange && isRemove) {
+	            var ts = this.selectedTabstop;
+	            var changedOutside = ts && !ts.some(function(r) {
+	                return comparePoints(r.start, start) <= 0 && comparePoints(r.end, end) >= 0;
+	            });
+	            if (changedOutside)
+	                return this.detach();
+	        }
+	        var ranges = this.ranges;
+	        for (var i = 0; i < ranges.length; i++) {
+	            var r = ranges[i];
+	            if (r.end.row < start.row)
+	                continue;
+
+	            if (isRemove && comparePoints(start, r.start) < 0 && comparePoints(end, r.end) > 0) {
+	                this.removeRange(r);
+	                i--;
+	                continue;
+	            }
+
+	            if (r.start.row == startRow && r.start.column > start.column)
+	                r.start.column += colDiff;
+	            if (r.end.row == startRow && r.end.column >= start.column)
+	                r.end.column += colDiff;
+	            if (r.start.row >= startRow)
+	                r.start.row += lineDif;
+	            if (r.end.row >= startRow)
+	                r.end.row += lineDif;
+
+	            if (comparePoints(r.start, r.end) > 0)
+	                this.removeRange(r);
+	        }
+	        if (!ranges.length)
+	            this.detach();
+	    };
+	    this.updateLinkedFields = function() {
+	        var ts = this.selectedTabstop;
+	        if (!ts || !ts.hasLinkedRanges)
+	            return;
+	        this.$inChange = true;
+	        var session = this.editor.session;
+	        var text = session.getTextRange(ts.firstNonLinked);
+	        for (var i = ts.length; i--;) {
+	            var range = ts[i];
+	            if (!range.linked)
+	                continue;
+	            var fmt = exports.snippetManager.tmStrFormat(text, range.original);
+	            session.replace(range, fmt);
+	        }
+	        this.$inChange = false;
+	    };
+	    this.onAfterExec = function(e) {
+	        if (e.command && !e.command.readOnly)
+	            this.updateLinkedFields();
+	    };
+	    this.onChangeSelection = function() {
+	        if (!this.editor)
+	            return;
+	        var lead = this.editor.selection.lead;
+	        var anchor = this.editor.selection.anchor;
+	        var isEmpty = this.editor.selection.isEmpty();
+	        for (var i = this.ranges.length; i--;) {
+	            if (this.ranges[i].linked)
+	                continue;
+	            var containsLead = this.ranges[i].contains(lead.row, lead.column);
+	            var containsAnchor = isEmpty || this.ranges[i].contains(anchor.row, anchor.column);
+	            if (containsLead && containsAnchor)
+	                return;
+	        }
+	        this.detach();
+	    };
+	    this.onChangeSession = function() {
+	        this.detach();
+	    };
+	    this.tabNext = function(dir) {
+	        var max = this.tabstops.length;
+	        var index = this.index + (dir || 1);
+	        index = Math.min(Math.max(index, 1), max);
+	        if (index == max)
+	            index = 0;
+	        this.selectTabstop(index);
+	        if (index === 0)
+	            this.detach();
+	    };
+	    this.selectTabstop = function(index) {
+	        this.$openTabstops = null;
+	        var ts = this.tabstops[this.index];
+	        if (ts)
+	            this.addTabstopMarkers(ts);
+	        this.index = index;
+	        ts = this.tabstops[this.index];
+	        if (!ts || !ts.length)
+	            return;
+	        
+	        this.selectedTabstop = ts;
+	        if (!this.editor.inVirtualSelectionMode) {        
+	            var sel = this.editor.multiSelect;
+	            sel.toSingleRange(ts.firstNonLinked.clone());
+	            for (var i = ts.length; i--;) {
+	                if (ts.hasLinkedRanges && ts[i].linked)
+	                    continue;
+	                sel.addRange(ts[i].clone(), true);
+	            }
+	            if (sel.ranges[0])
+	                sel.addRange(sel.ranges[0].clone());
+	        } else {
+	            this.editor.selection.setRange(ts.firstNonLinked);
+	        }
+	        
+	        this.editor.keyBinding.addKeyboardHandler(this.keyboardHandler);
+	    };
+	    this.addTabstops = function(tabstops, start, end) {
+	        if (!this.$openTabstops)
+	            this.$openTabstops = [];
+	        if (!tabstops[0]) {
+	            var p = Range.fromPoints(end, end);
+	            moveRelative(p.start, start);
+	            moveRelative(p.end, start);
+	            tabstops[0] = [p];
+	            tabstops[0].index = 0;
+	        }
+
+	        var i = this.index;
+	        var arg = [i + 1, 0];
+	        var ranges = this.ranges;
+	        tabstops.forEach(function(ts, index) {
+	            var dest = this.$openTabstops[index] || ts;
+	                
+	            for (var i = ts.length; i--;) {
+	                var p = ts[i];
+	                var range = Range.fromPoints(p.start, p.end || p.start);
+	                movePoint(range.start, start);
+	                movePoint(range.end, start);
+	                range.original = p;
+	                range.tabstop = dest;
+	                ranges.push(range);
+	                if (dest != ts)
+	                    dest.unshift(range);
+	                else
+	                    dest[i] = range;
+	                if (p.fmtString) {
+	                    range.linked = true;
+	                    dest.hasLinkedRanges = true;
+	                } else if (!dest.firstNonLinked)
+	                    dest.firstNonLinked = range;
+	            }
+	            if (!dest.firstNonLinked)
+	                dest.hasLinkedRanges = false;
+	            if (dest === ts) {
+	                arg.push(dest);
+	                this.$openTabstops[index] = dest;
+	            }
+	            this.addTabstopMarkers(dest);
+	        }, this);
+	        
+	        if (arg.length > 2) {
+	            if (this.tabstops.length)
+	                arg.push(arg.splice(2, 1)[0]);
+	            this.tabstops.splice.apply(this.tabstops, arg);
+	        }
+	    };
+
+	    this.addTabstopMarkers = function(ts) {
+	        var session = this.editor.session;
+	        ts.forEach(function(range) {
+	            if  (!range.markerId)
+	                range.markerId = session.addMarker(range, "ace_snippet-marker", "text");
+	        });
+	    };
+	    this.removeTabstopMarkers = function(ts) {
+	        var session = this.editor.session;
+	        ts.forEach(function(range) {
+	            session.removeMarker(range.markerId);
+	            range.markerId = null;
+	        });
+	    };
+	    this.removeRange = function(range) {
+	        var i = range.tabstop.indexOf(range);
+	        range.tabstop.splice(i, 1);
+	        i = this.ranges.indexOf(range);
+	        this.ranges.splice(i, 1);
+	        this.editor.session.removeMarker(range.markerId);
+	        if (!range.tabstop.length) {
+	            i = this.tabstops.indexOf(range.tabstop);
+	            if (i != -1)
+	                this.tabstops.splice(i, 1);
+	            if (!this.tabstops.length)
+	                this.detach();
+	        }
+	    };
+
+	    this.keyboardHandler = new HashHandler();
+	    this.keyboardHandler.bindKeys({
+	        "Tab": function(ed) {
+	            if (exports.snippetManager && exports.snippetManager.expandWithTab(ed)) {
+	                return;
+	            }
+
+	            ed.tabstopManager.tabNext(1);
+	        },
+	        "Shift-Tab": function(ed) {
+	            ed.tabstopManager.tabNext(-1);
+	        },
+	        "Esc": function(ed) {
+	            ed.tabstopManager.detach();
+	        },
+	        "Return": function(ed) {
+	            return false;
+	        }
+	    });
+	}).call(TabstopManager.prototype);
+
+
+
+	var changeTracker = {};
+	changeTracker.onChange = Anchor.prototype.onChange;
+	changeTracker.setPosition = function(row, column) {
+	    this.pos.row = row;
+	    this.pos.column = column;
+	};
+	changeTracker.update = function(pos, delta, $insertRight) {
+	    this.$insertRight = $insertRight;
+	    this.pos = pos; 
+	    this.onChange(delta);
+	};
+
+	var movePoint = function(point, diff) {
+	    if (point.row == 0)
+	        point.column += diff.column;
+	    point.row += diff.row;
+	};
+
+	var moveRelative = function(point, start) {
+	    if (point.row == start.row)
+	        point.column -= start.column;
+	    point.row -= start.row;
+	};
+
+
+	acequire("./lib/dom").importCssString("\
+	.ace_snippet-marker {\
+	    -moz-box-sizing: border-box;\
+	    box-sizing: border-box;\
+	    background: rgba(194, 193, 208, 0.09);\
+	    border: 1px dotted rgba(211, 208, 235, 0.62);\
+	    position: absolute;\
+	}");
+
+	exports.snippetManager = new SnippetManager();
+
+
+	var Editor = acequire("./editor").Editor;
+	(function() {
+	    this.insertSnippet = function(content, options) {
+	        return exports.snippetManager.insertSnippet(this, content, options);
+	    };
+	    this.expandSnippet = function(options) {
+	        return exports.snippetManager.expandWithTab(this, options);
+	    };
+	}).call(Editor.prototype);
+
+	});
+
+	ace.define("ace/autocomplete/popup",["require","exports","module","ace/edit_session","ace/virtual_renderer","ace/editor","ace/range","ace/lib/event","ace/lib/lang","ace/lib/dom"], function(acequire, exports, module) {
+	"use strict";
+
+	var EditSession = acequire("../edit_session").EditSession;
+	var Renderer = acequire("../virtual_renderer").VirtualRenderer;
+	var Editor = acequire("../editor").Editor;
+	var Range = acequire("../range").Range;
+	var event = acequire("../lib/event");
+	var lang = acequire("../lib/lang");
+	var dom = acequire("../lib/dom");
+
+	var $singleLineEditor = function(el) {
+	    var renderer = new Renderer(el);
+
+	    renderer.$maxLines = 4;
+
+	    var editor = new Editor(renderer);
+
+	    editor.setHighlightActiveLine(false);
+	    editor.setShowPrintMargin(false);
+	    editor.renderer.setShowGutter(false);
+	    editor.renderer.setHighlightGutterLine(false);
+
+	    editor.$mouseHandler.$focusWaitTimout = 0;
+	    editor.$highlightTagPending = true;
+
+	    return editor;
+	};
+
+	var AcePopup = function(parentNode) {
+	    var el = dom.createElement("div");
+	    var popup = new $singleLineEditor(el);
+
+	    if (parentNode)
+	        parentNode.appendChild(el);
+	    el.style.display = "none";
+	    popup.renderer.content.style.cursor = "default";
+	    popup.renderer.setStyle("ace_autocomplete");
+
+	    popup.setOption("displayIndentGuides", false);
+	    popup.setOption("dragDelay", 150);
+
+	    var noop = function(){};
+
+	    popup.focus = noop;
+	    popup.$isFocused = true;
+
+	    popup.renderer.$cursorLayer.restartTimer = noop;
+	    popup.renderer.$cursorLayer.element.style.opacity = 0;
+
+	    popup.renderer.$maxLines = 8;
+	    popup.renderer.$keepTextAreaAtCursor = false;
+
+	    popup.setHighlightActiveLine(false);
+	    popup.session.highlight("");
+	    popup.session.$searchHighlight.clazz = "ace_highlight-marker";
+
+	    popup.on("mousedown", function(e) {
+	        var pos = e.getDocumentPosition();
+	        popup.selection.moveToPosition(pos);
+	        selectionMarker.start.row = selectionMarker.end.row = pos.row;
+	        e.stop();
+	    });
+
+	    var lastMouseEvent;
+	    var hoverMarker = new Range(-1,0,-1,Infinity);
+	    var selectionMarker = new Range(-1,0,-1,Infinity);
+	    selectionMarker.id = popup.session.addMarker(selectionMarker, "ace_active-line", "fullLine");
+	    popup.setSelectOnHover = function(val) {
+	        if (!val) {
+	            hoverMarker.id = popup.session.addMarker(hoverMarker, "ace_line-hover", "fullLine");
+	        } else if (hoverMarker.id) {
+	            popup.session.removeMarker(hoverMarker.id);
+	            hoverMarker.id = null;
+	        }
+	    };
+	    popup.setSelectOnHover(false);
+	    popup.on("mousemove", function(e) {
+	        if (!lastMouseEvent) {
+	            lastMouseEvent = e;
+	            return;
+	        }
+	        if (lastMouseEvent.x == e.x && lastMouseEvent.y == e.y) {
+	            return;
+	        }
+	        lastMouseEvent = e;
+	        lastMouseEvent.scrollTop = popup.renderer.scrollTop;
+	        var row = lastMouseEvent.getDocumentPosition().row;
+	        if (hoverMarker.start.row != row) {
+	            if (!hoverMarker.id)
+	                popup.setRow(row);
+	            setHoverMarker(row);
+	        }
+	    });
+	    popup.renderer.on("beforeRender", function() {
+	        if (lastMouseEvent && hoverMarker.start.row != -1) {
+	            lastMouseEvent.$pos = null;
+	            var row = lastMouseEvent.getDocumentPosition().row;
+	            if (!hoverMarker.id)
+	                popup.setRow(row);
+	            setHoverMarker(row, true);
+	        }
+	    });
+	    popup.renderer.on("afterRender", function() {
+	        var row = popup.getRow();
+	        var t = popup.renderer.$textLayer;
+	        var selected = t.element.childNodes[row - t.config.firstRow];
+	        if (selected == t.selectedNode)
+	            return;
+	        if (t.selectedNode)
+	            dom.removeCssClass(t.selectedNode, "ace_selected");
+	        t.selectedNode = selected;
+	        if (selected)
+	            dom.addCssClass(selected, "ace_selected");
+	    });
+	    var hideHoverMarker = function() { setHoverMarker(-1) };
+	    var setHoverMarker = function(row, suppressRedraw) {
+	        if (row !== hoverMarker.start.row) {
+	            hoverMarker.start.row = hoverMarker.end.row = row;
+	            if (!suppressRedraw)
+	                popup.session._emit("changeBackMarker");
+	            popup._emit("changeHoverMarker");
+	        }
+	    };
+	    popup.getHoveredRow = function() {
+	        return hoverMarker.start.row;
+	    };
+
+	    event.addListener(popup.container, "mouseout", hideHoverMarker);
+	    popup.on("hide", hideHoverMarker);
+	    popup.on("changeSelection", hideHoverMarker);
+
+	    popup.session.doc.getLength = function() {
+	        return popup.data.length;
+	    };
+	    popup.session.doc.getLine = function(i) {
+	        var data = popup.data[i];
+	        if (typeof data == "string")
+	            return data;
+	        return (data && data.value) || "";
+	    };
+
+	    var bgTokenizer = popup.session.bgTokenizer;
+	    bgTokenizer.$tokenizeRow = function(row) {
+	        var data = popup.data[row];
+	        var tokens = [];
+	        if (!data)
+	            return tokens;
+	        if (typeof data == "string")
+	            data = {value: data};
+	        if (!data.caption)
+	            data.caption = data.value || data.name;
+
+	        var last = -1;
+	        var flag, c;
+	        for (var i = 0; i < data.caption.length; i++) {
+	            c = data.caption[i];
+	            flag = data.matchMask & (1 << i) ? 1 : 0;
+	            if (last !== flag) {
+	                tokens.push({type: data.className || "" + ( flag ? "completion-highlight" : ""), value: c});
+	                last = flag;
+	            } else {
+	                tokens[tokens.length - 1].value += c;
+	            }
+	        }
+
+	        if (data.meta) {
+	            var maxW = popup.renderer.$size.scrollerWidth / popup.renderer.layerConfig.characterWidth;
+	            if (data.meta.length + data.caption.length < maxW - 2)
+	                tokens.push({type: "rightAlignedText", value: data.meta});
+	        }
+	        return tokens;
+	    };
+	    bgTokenizer.$updateOnChange = noop;
+	    bgTokenizer.start = noop;
+
+	    popup.session.$computeWidth = function() {
+	        return this.screenWidth = 0;
+	    };
+	    popup.isOpen = false;
+	    popup.isTopdown = false;
+
+	    popup.data = [];
+	    popup.setData = function(list) {
+	        popup.data = list || [];
+	        popup.setValue(lang.stringRepeat("\n", list.length), -1);
+	        popup.setRow(0);
+	    };
+	    popup.getData = function(row) {
+	        return popup.data[row];
+	    };
+
+	    popup.getRow = function() {
+	        return selectionMarker.start.row;
+	    };
+	    popup.setRow = function(line) {
+	        line = Math.max(-1, Math.min(this.data.length, line));
+	        if (selectionMarker.start.row != line) {
+	            popup.selection.clearSelection();
+	            selectionMarker.start.row = selectionMarker.end.row = line || 0;
+	            popup.session._emit("changeBackMarker");
+	            popup.moveCursorTo(line || 0, 0);
+	            if (popup.isOpen)
+	                popup._signal("select");
+	        }
+	    };
+
+	    popup.on("changeSelection", function() {
+	        if (popup.isOpen)
+	            popup.setRow(popup.selection.lead.row);
+	    });
+
+	    popup.hide = function() {
+	        this.container.style.display = "none";
+	        this._signal("hide");
+	        popup.isOpen = false;
+	    };
+	    popup.show = function(pos, lineHeight, topdownOnly) {
+	        var el = this.container;
+	        var screenHeight = window.innerHeight;
+	        var screenWidth = window.innerWidth;
+	        var renderer = this.renderer;
+	        var maxH = renderer.$maxLines * lineHeight * 1.4;
+	        var top = pos.top + this.$borderSize;
+	        if (top + maxH > screenHeight - lineHeight && !topdownOnly) {
+	            el.style.top = "";
+	            el.style.bottom = screenHeight - top + "px";
+	            popup.isTopdown = false;
+	        } else {
+	            top += lineHeight;
+	            el.style.top = top + "px";
+	            el.style.bottom = "";
+	            popup.isTopdown = true;
+	        }
+
+	        el.style.display = "";
+	        this.renderer.$textLayer.checkForSizeChanges();
+
+	        var left = pos.left;
+	        if (left + el.offsetWidth > screenWidth)
+	            left = screenWidth - el.offsetWidth;
+
+	        el.style.left = left + "px";
+
+	        this._signal("show");
+	        lastMouseEvent = null;
+	        popup.isOpen = true;
+	    };
+
+	    popup.getTextLeftOffset = function() {
+	        return this.$borderSize + this.renderer.$padding + this.$imageSize;
+	    };
+
+	    popup.$imageSize = 0;
+	    popup.$borderSize = 1;
+
+	    return popup;
+	};
+
+	dom.importCssString("\
+	.ace_editor.ace_autocomplete .ace_marker-layer .ace_active-line {\
+	    background-color: #CAD6FA;\
+	    z-index: 1;\
+	}\
+	.ace_editor.ace_autocomplete .ace_line-hover {\
+	    border: 1px solid #abbffe;\
+	    margin-top: -1px;\
+	    background: rgba(233,233,253,0.4);\
+	}\
+	.ace_editor.ace_autocomplete .ace_line-hover {\
+	    position: absolute;\
+	    z-index: 2;\
+	}\
+	.ace_editor.ace_autocomplete .ace_scroller {\
+	   background: none;\
+	   border: none;\
+	   box-shadow: none;\
+	}\
+	.ace_rightAlignedText {\
+	    color: gray;\
+	    display: inline-block;\
+	    position: absolute;\
+	    right: 4px;\
+	    text-align: right;\
+	    z-index: -1;\
+	}\
+	.ace_editor.ace_autocomplete .ace_completion-highlight{\
+	    color: #000;\
+	    text-shadow: 0 0 0.01em;\
+	}\
+	.ace_editor.ace_autocomplete {\
+	    width: 280px;\
+	    z-index: 200000;\
+	    background: #fbfbfb;\
+	    color: #444;\
+	    border: 1px lightgray solid;\
+	    position: fixed;\
+	    box-shadow: 2px 3px 5px rgba(0,0,0,.2);\
+	    line-height: 1.4;\
+	}");
+
+	exports.AcePopup = AcePopup;
+
+	});
+
+	ace.define("ace/autocomplete/util",["require","exports","module"], function(acequire, exports, module) {
+	"use strict";
+
+	exports.parForEach = function(array, fn, callback) {
+	    var completed = 0;
+	    var arLength = array.length;
+	    if (arLength === 0)
+	        callback();
+	    for (var i = 0; i < arLength; i++) {
+	        fn(array[i], function(result, err) {
+	            completed++;
+	            if (completed === arLength)
+	                callback(result, err);
+	        });
+	    }
+	};
+
+	var ID_REGEX = /[a-zA-Z_0-9\$\-\u00A2-\uFFFF]/;
+
+	exports.retrievePrecedingIdentifier = function(text, pos, regex) {
+	    regex = regex || ID_REGEX;
+	    var buf = [];
+	    for (var i = pos-1; i >= 0; i--) {
+	        if (regex.test(text[i]))
+	            buf.push(text[i]);
+	        else
+	            break;
+	    }
+	    return buf.reverse().join("");
+	};
+
+	exports.retrieveFollowingIdentifier = function(text, pos, regex) {
+	    regex = regex || ID_REGEX;
+	    var buf = [];
+	    for (var i = pos; i < text.length; i++) {
+	        if (regex.test(text[i]))
+	            buf.push(text[i]);
+	        else
+	            break;
+	    }
+	    return buf;
+	};
+
+	});
+
+	ace.define("ace/autocomplete",["require","exports","module","ace/keyboard/hash_handler","ace/autocomplete/popup","ace/autocomplete/util","ace/lib/event","ace/lib/lang","ace/lib/dom","ace/snippets"], function(acequire, exports, module) {
+	"use strict";
+
+	var HashHandler = acequire("./keyboard/hash_handler").HashHandler;
+	var AcePopup = acequire("./autocomplete/popup").AcePopup;
+	var util = acequire("./autocomplete/util");
+	var event = acequire("./lib/event");
+	var lang = acequire("./lib/lang");
+	var dom = acequire("./lib/dom");
+	var snippetManager = acequire("./snippets").snippetManager;
+
+	var Autocomplete = function() {
+	    this.autoInsert = true;
+	    this.autoSelect = true;
+	    this.keyboardHandler = new HashHandler();
+	    this.keyboardHandler.bindKeys(this.commands);
+
+	    this.blurListener = this.blurListener.bind(this);
+	    this.changeListener = this.changeListener.bind(this);
+	    this.mousedownListener = this.mousedownListener.bind(this);
+	    this.mousewheelListener = this.mousewheelListener.bind(this);
+
+	    this.changeTimer = lang.delayedCall(function() {
+	        this.updateCompletions(true);
+	    }.bind(this));
+
+	    this.tooltipTimer = lang.delayedCall(this.updateDocTooltip.bind(this), 50);
+	};
+
+	(function() {
+	    this.gatherCompletionsId = 0;
+
+	    this.$init = function() {
+	        this.popup = new AcePopup(document.body || document.documentElement);
+	        this.popup.on("click", function(e) {
+	            this.insertMatch();
+	            e.stop();
+	        }.bind(this));
+	        this.popup.focus = this.editor.focus.bind(this.editor);
+	        this.popup.on("show", this.tooltipTimer.bind(null, null));
+	        this.popup.on("select", this.tooltipTimer.bind(null, null));
+	        this.popup.on("changeHoverMarker", this.tooltipTimer.bind(null, null));
+	        return this.popup;
+	    };
+
+	    this.getPopup = function() {
+	        return this.popup || this.$init();
+	    };
+
+	    this.openPopup = function(editor, prefix, keepPopupPosition) {
+	        if (!this.popup)
+	            this.$init();
+
+	        this.popup.setData(this.completions.filtered);
+
+	        var renderer = editor.renderer;
+	        this.popup.setRow(this.autoSelect ? 0 : -1);
+	        if (!keepPopupPosition) {
+	            this.popup.setTheme(editor.getTheme());
+	            this.popup.setFontSize(editor.getFontSize());
+
+	            var lineHeight = renderer.layerConfig.lineHeight;
+
+	            var pos = renderer.$cursorLayer.getPixelPosition(this.base, true);
+	            pos.left -= this.popup.getTextLeftOffset();
+
+	            var rect = editor.container.getBoundingClientRect();
+	            pos.top += rect.top - renderer.layerConfig.offset;
+	            pos.left += rect.left - editor.renderer.scrollLeft;
+	            pos.left += renderer.$gutterLayer.gutterWidth;
+
+	            this.popup.show(pos, lineHeight);
+	        } else if (keepPopupPosition && !prefix) {
+	            this.detach();
+	        }
+	    };
+
+	    this.detach = function() {
+	        this.editor.keyBinding.removeKeyboardHandler(this.keyboardHandler);
+	        this.editor.off("changeSelection", this.changeListener);
+	        this.editor.off("blur", this.blurListener);
+	        this.editor.off("mousedown", this.mousedownListener);
+	        this.editor.off("mousewheel", this.mousewheelListener);
+	        this.changeTimer.cancel();
+	        this.hideDocTooltip();
+
+	        if (this.popup && this.popup.isOpen) {
+	            this.gatherCompletionsId += 1;
+	            this.popup.hide();
+	        }
+	        
+	        if (this.base)
+	            this.base.detach();
+	        this.activated = false;
+	        this.completions = this.base = null;
+	    };
+
+	    this.changeListener = function(e) {
+	        var cursor = this.editor.selection.lead;
+	        if (cursor.row != this.base.row || cursor.column < this.base.column) {
+	            this.detach();
+	        }
+	        if (this.activated)
+	            this.changeTimer.schedule();
+	        else
+	            this.detach();
+	    };
+
+	    this.blurListener = function(e) {
+	        var el = document.activeElement;
+	        var text = this.editor.textInput.getElement()
+	        if (el != text && el.parentNode != this.popup.container
+	            && el != this.tooltipNode && e.relatedTarget != this.tooltipNode
+	            && e.relatedTarget != text
+	        ) {
+	            this.detach();
+	        }
+	    };
+
+	    this.mousedownListener = function(e) {
+	        this.detach();
+	    };
+
+	    this.mousewheelListener = function(e) {
+	        this.detach();
+	    };
+
+	    this.goTo = function(where) {
+	        var row = this.popup.getRow();
+	        var max = this.popup.session.getLength() - 1;
+
+	        switch(where) {
+	            case "up": row = row <= 0 ? max : row - 1; break;
+	            case "down": row = row >= max ? -1 : row + 1; break;
+	            case "start": row = 0; break;
+	            case "end": row = max; break;
+	        }
+
+	        this.popup.setRow(row);
+	    };
+
+	    this.insertMatch = function(data) {
+	        if (!data)
+	            data = this.popup.getData(this.popup.getRow());
+	        if (!data)
+	            return false;
+
+	        if (data.completer && data.completer.insertMatch) {
+	            data.completer.insertMatch(this.editor, data);
+	        } else {
+	            if (this.completions.filterText) {
+	                var ranges = this.editor.selection.getAllRanges();
+	                for (var i = 0, range; range = ranges[i]; i++) {
+	                    range.start.column -= this.completions.filterText.length;
+	                    this.editor.session.remove(range);
+	                }
+	            }
+	            if (data.snippet)
+	                snippetManager.insertSnippet(this.editor, data.snippet);
+	            else
+	                this.editor.execCommand("insertstring", data.value || data);
+	        }
+	        this.detach();
+	    };
+
+
+	    this.commands = {
+	        "Up": function(editor) { editor.completer.goTo("up"); },
+	        "Down": function(editor) { editor.completer.goTo("down"); },
+	        "Ctrl-Up|Ctrl-Home": function(editor) { editor.completer.goTo("start"); },
+	        "Ctrl-Down|Ctrl-End": function(editor) { editor.completer.goTo("end"); },
+
+	        "Esc": function(editor) { editor.completer.detach(); },
+	        "Space": function(editor) { editor.completer.detach(); editor.insert(" ");},
+	        "Return": function(editor) { return editor.completer.insertMatch(); },
+	        "Shift-Return": function(editor) { editor.completer.insertMatch(true); },
+	        "Tab": function(editor) {
+	            var result = editor.completer.insertMatch();
+	            if (!result && !editor.tabstopManager)
+	                editor.completer.goTo("down");
+	            else
+	                return result;
+	        },
+
+	        "PageUp": function(editor) { editor.completer.popup.gotoPageUp(); },
+	        "PageDown": function(editor) { editor.completer.popup.gotoPageDown(); }
+	    };
+
+	    this.gatherCompletions = function(editor, callback) {
+	        var session = editor.getSession();
+	        var pos = editor.getCursorPosition();
+
+	        var line = session.getLine(pos.row);
+	        var prefix = util.retrievePrecedingIdentifier(line, pos.column);
+
+	        this.base = session.doc.createAnchor(pos.row, pos.column - prefix.length);
+	        this.base.$insertRight = true;
+	        
+	        var matches = [];
+	        var total = editor.completers.length;
+	        editor.completers.forEach(function(completer, i) {
+	            completer.getCompletions(editor, session, pos, prefix, function(err, results) {
+	                if (!err)
+	                    matches = matches.concat(results);
+	                var pos = editor.getCursorPosition();
+	                var line = session.getLine(pos.row);
+	                callback(null, {
+	                    prefix: util.retrievePrecedingIdentifier(line, pos.column, results[0] && results[0].identifierRegex),
+	                    matches: matches,
+	                    finished: (--total === 0)
+	                });
+	            });
+	        });
+	        return true;
+	    };
+
+	    this.showPopup = function(editor) {
+	        if (this.editor)
+	            this.detach();
+
+	        this.activated = true;
+
+	        this.editor = editor;
+	        if (editor.completer != this) {
+	            if (editor.completer)
+	                editor.completer.detach();
+	            editor.completer = this;
+	        }
+
+	        editor.keyBinding.addKeyboardHandler(this.keyboardHandler);
+	        editor.on("changeSelection", this.changeListener);
+	        editor.on("blur", this.blurListener);
+	        editor.on("mousedown", this.mousedownListener);
+	        editor.on("mousewheel", this.mousewheelListener);
+
+	        this.updateCompletions();
+	    };
+
+	    this.updateCompletions = function(keepPopupPosition) {
+	        if (keepPopupPosition && this.base && this.completions) {
+	            var pos = this.editor.getCursorPosition();
+	            var prefix = this.editor.session.getTextRange({start: this.base, end: pos});
+	            if (prefix == this.completions.filterText)
+	                return;
+	            this.completions.setFilter(prefix);
+	            if (!this.completions.filtered.length)
+	                return this.detach();
+	            if (this.completions.filtered.length == 1
+	            && this.completions.filtered[0].value == prefix
+	            && !this.completions.filtered[0].snippet)
+	                return this.detach();
+	            this.openPopup(this.editor, prefix, keepPopupPosition);
+	            return;
+	        }
+	        var _id = this.gatherCompletionsId;
+	        this.gatherCompletions(this.editor, function(err, results) {
+	            var detachIfFinished = function() {
+	                if (!results.finished) return;
+	                return this.detach();
+	            }.bind(this);
+
+	            var prefix = results.prefix;
+	            var matches = results && results.matches;
+	            
+	            if (!matches || !matches.length)
+	                return detachIfFinished();
+	            if (prefix.indexOf(results.prefix) !== 0 || _id != this.gatherCompletionsId)
+	                return;
+
+	            this.completions = new FilteredList(matches);
+	            this.completions.setFilter(prefix);
+	            var filtered = this.completions.filtered;
+	            if (!filtered.length)
+	                return detachIfFinished();
+	            if (filtered.length == 1 && filtered[0].value == prefix && !filtered[0].snippet)
+	                return detachIfFinished();
+	            if (this.autoInsert && filtered.length == 1 && results.finished)
+	                return this.insertMatch(filtered[0]);
+
+	            this.openPopup(this.editor, prefix, keepPopupPosition);
+	        }.bind(this));
+	    };
+
+	    this.cancelContextMenu = function() {
+	        this.editor.$mouseHandler.cancelContextMenu();
+	    };
+
+	    this.updateDocTooltip = function() {
+	        var popup = this.popup;
+	        var all = popup.data;
+	        var selected = all && (all[popup.getHoveredRow()] || all[popup.getRow()]);
+	        var doc = null;
+	        if (!selected || !this.editor || !this.popup.isOpen)
+	            return this.hideDocTooltip();
+	        this.editor.completers.some(function(completer) {
+	            if (completer.getDocTooltip)
+	                doc = completer.getDocTooltip(selected);
+	            return doc;
+	        });
+	        if (!doc)
+	            doc = selected;
+
+	        if (typeof doc == "string")
+	            doc = {docText: doc}
+	        if (!doc || !(doc.docHTML || doc.docText))
+	            return this.hideDocTooltip();
+	        this.showDocTooltip(doc);
+	    };
+
+	    this.showDocTooltip = function(item) {
+	        if (!this.tooltipNode) {
+	            this.tooltipNode = dom.createElement("div");
+	            this.tooltipNode.className = "ace_tooltip ace_doc-tooltip";
+	            this.tooltipNode.style.margin = 0;
+	            this.tooltipNode.style.pointerEvents = "auto";
+	            this.tooltipNode.tabIndex = -1;
+	            this.tooltipNode.onblur = this.blurListener.bind(this);
+	        }
+
+	        var tooltipNode = this.tooltipNode;
+	        if (item.docHTML) {
+	            tooltipNode.innerHTML = item.docHTML;
+	        } else if (item.docText) {
+	            tooltipNode.textContent = item.docText;
+	        }
+
+	        if (!tooltipNode.parentNode)
+	            document.body.appendChild(tooltipNode);
+	        var popup = this.popup;
+	        var rect = popup.container.getBoundingClientRect();
+	        tooltipNode.style.top = popup.container.style.top;
+	        tooltipNode.style.bottom = popup.container.style.bottom;
+
+	        if (window.innerWidth - rect.right < 320) {
+	            tooltipNode.style.right = window.innerWidth - rect.left + "px";
+	            tooltipNode.style.left = "";
+	        } else {
+	            tooltipNode.style.left = (rect.right + 1) + "px";
+	            tooltipNode.style.right = "";
+	        }
+	        tooltipNode.style.display = "block";
+	    };
+
+	    this.hideDocTooltip = function() {
+	        this.tooltipTimer.cancel();
+	        if (!this.tooltipNode) return;
+	        var el = this.tooltipNode;
+	        if (!this.editor.isFocused() && document.activeElement == el)
+	            this.editor.focus();
+	        this.tooltipNode = null;
+	        if (el.parentNode)
+	            el.parentNode.removeChild(el);
+	    };
+
+	}).call(Autocomplete.prototype);
+
+	Autocomplete.startCommand = {
+	    name: "startAutocomplete",
+	    exec: function(editor) {
+	        if (!editor.completer)
+	            editor.completer = new Autocomplete();
+	        editor.completer.autoInsert = 
+	        editor.completer.autoSelect = true;
+	        editor.completer.showPopup(editor);
+	        editor.completer.cancelContextMenu();
+	    },
+	    bindKey: "Ctrl-Space|Ctrl-Shift-Space|Alt-Space"
+	};
+
+	var FilteredList = function(array, filterText, mutateData) {
+	    this.all = array;
+	    this.filtered = array;
+	    this.filterText = filterText || "";
+	};
+	(function(){
+	    this.setFilter = function(str) {
+	        if (str.length > this.filterText && str.lastIndexOf(this.filterText, 0) === 0)
+	            var matches = this.filtered;
+	        else
+	            var matches = this.all;
+
+	        this.filterText = str;
+	        matches = this.filterCompletions(matches, this.filterText);
+	        matches = matches.sort(function(a, b) {
+	            return b.exactMatch - a.exactMatch || b.score - a.score;
+	        });
+	        var prev = null;
+	        matches = matches.filter(function(item){
+	            var caption = item.snippet || item.caption || item.value;
+	            if (caption === prev) return false;
+	            prev = caption;
+	            return true;
+	        });
+
+	        this.filtered = matches;
+	    };
+	    this.filterCompletions = function(items, needle) {
+	        var results = [];
+	        var upper = needle.toUpperCase();
+	        var lower = needle.toLowerCase();
+	        loop: for (var i = 0, item; item = items[i]; i++) {
+	            var caption = item.value || item.caption || item.snippet;
+	            if (!caption) continue;
+	            var lastIndex = -1;
+	            var matchMask = 0;
+	            var penalty = 0;
+	            var index, distance;
+	            for (var j = 0; j < needle.length; j++) {
+	                var i1 = caption.indexOf(lower[j], lastIndex + 1);
+	                var i2 = caption.indexOf(upper[j], lastIndex + 1);
+	                index = (i1 >= 0) ? ((i2 < 0 || i1 < i2) ? i1 : i2) : i2;
+	                if (index < 0)
+	                    continue loop;
+	                distance = index - lastIndex - 1;
+	                if (distance > 0) {
+	                    if (lastIndex === -1)
+	                        penalty += 10;
+	                    penalty += distance;
+	                }
+	                matchMask = matchMask | (1 << index);
+	                lastIndex = index;
+	            }
+	            item.matchMask = matchMask;
+	            item.exactMatch = penalty ? 0 : 1;
+	            item.score = (item.score || 0) - penalty;
+	            results.push(item);
+	        }
+	        return results;
+	    };
+	}).call(FilteredList.prototype);
+
+	exports.Autocomplete = Autocomplete;
+	exports.FilteredList = FilteredList;
+
+	});
+
+	ace.define("ace/autocomplete/text_completer",["require","exports","module","ace/range"], function(acequire, exports, module) {
+	    var Range = acequire("../range").Range;
+	    
+	    var splitRegex = /[^a-zA-Z_0-9\$\-\u00C0-\u1FFF\u2C00-\uD7FF\w]+/;
+
+	    function getWordIndex(doc, pos) {
+	        var textBefore = doc.getTextRange(Range.fromPoints({row: 0, column:0}, pos));
+	        return textBefore.split(splitRegex).length - 1;
+	    }
+	    function wordDistance(doc, pos) {
+	        var prefixPos = getWordIndex(doc, pos);
+	        var words = doc.getValue().split(splitRegex);
+	        var wordScores = Object.create(null);
+	        
+	        var currentWord = words[prefixPos];
+
+	        words.forEach(function(word, idx) {
+	            if (!word || word === currentWord) return;
+
+	            var distance = Math.abs(prefixPos - idx);
+	            var score = words.length - distance;
+	            if (wordScores[word]) {
+	                wordScores[word] = Math.max(score, wordScores[word]);
+	            } else {
+	                wordScores[word] = score;
+	            }
+	        });
+	        return wordScores;
 	    }
 
-	    return type ? builder.getBlob(type) : builder.getBlob()
-	  }
+	    exports.getCompletions = function(editor, session, pos, prefix, callback) {
+	        var wordScore = wordDistance(session, pos, prefix);
+	        var wordList = Object.keys(wordScore);
+	        callback(null, wordList.map(function(word) {
+	            return {
+	                caption: word,
+	                value: word,
+	                score: wordScore[word],
+	                meta: "local"
+	            };
+	        }));
+	    };
+	});
+
+	ace.define("ace/ext/language_tools",["require","exports","module","ace/snippets","ace/autocomplete","ace/config","ace/lib/lang","ace/autocomplete/util","ace/autocomplete/text_completer","ace/editor","ace/config"], function(acequire, exports, module) {
+	"use strict";
+
+	var snippetManager = acequire("../snippets").snippetManager;
+	var Autocomplete = acequire("../autocomplete").Autocomplete;
+	var config = acequire("../config");
+	var lang = acequire("../lib/lang");
+	var util = acequire("../autocomplete/util");
+
+	var textCompleter = acequire("../autocomplete/text_completer");
+	var keyWordCompleter = {
+	    getCompletions: function(editor, session, pos, prefix, callback) {
+	        if (session.$mode.completer) {
+	            return session.$mode.completer.getCompletions(editor, session, pos, prefix, callback);
+	        }
+	        var state = editor.session.getState(pos.row);
+	        var completions = session.$mode.getCompletions(state, session, pos, prefix);
+	        callback(null, completions);
+	    }
+	};
+
+	var snippetCompleter = {
+	    getCompletions: function(editor, session, pos, prefix, callback) {
+	        var snippetMap = snippetManager.snippetMap;
+	        var completions = [];
+	        snippetManager.getActiveScopes(editor).forEach(function(scope) {
+	            var snippets = snippetMap[scope] || [];
+	            for (var i = snippets.length; i--;) {
+	                var s = snippets[i];
+	                var caption = s.name || s.tabTrigger;
+	                if (!caption)
+	                    continue;
+	                completions.push({
+	                    caption: caption,
+	                    snippet: s.content,
+	                    meta: s.tabTrigger && !s.name ? s.tabTrigger + "\u21E5 " : "snippet",
+	                    type: "snippet"
+	                });
+	            }
+	        }, this);
+	        callback(null, completions);
+	    },
+	    getDocTooltip: function(item) {
+	        if (item.type == "snippet" && !item.docHTML) {
+	            item.docHTML = [
+	                "<b>", lang.escapeHTML(item.caption), "</b>", "<hr></hr>",
+	                lang.escapeHTML(item.snippet)
+	            ].join("");
+	        }
+	    }
+	};
+
+	var completers = [snippetCompleter, textCompleter, keyWordCompleter];
+	exports.setCompleters = function(val) {
+	    completers = val || [];
+	};
+	exports.addCompleter = function(completer) {
+	    completers.push(completer);
+	};
+	exports.textCompleter = textCompleter;
+	exports.keyWordCompleter = keyWordCompleter;
+	exports.snippetCompleter = snippetCompleter;
+
+	var expandSnippet = {
+	    name: "expandSnippet",
+	    exec: function(editor) {
+	        return snippetManager.expandWithTab(editor);
+	    },
+	    bindKey: "Tab"
+	};
+
+	var onChangeMode = function(e, editor) {
+	    loadSnippetsForMode(editor.session.$mode);
+	};
+
+	var loadSnippetsForMode = function(mode) {
+	    var id = mode.$id;
+	    if (!snippetManager.files)
+	        snippetManager.files = {};
+	    loadSnippetFile(id);
+	    if (mode.modes)
+	        mode.modes.forEach(loadSnippetsForMode);
+	};
+
+	var loadSnippetFile = function(id) {
+	    if (!id || snippetManager.files[id])
+	        return;
+	    var snippetFilePath = id.replace("mode", "snippets");
+	    snippetManager.files[id] = {};
+	    config.loadModule(snippetFilePath, function(m) {
+	        if (m) {
+	            snippetManager.files[id] = m;
+	            if (!m.snippets && m.snippetText)
+	                m.snippets = snippetManager.parseSnippetFile(m.snippetText);
+	            snippetManager.register(m.snippets || [], m.scope);
+	            if (m.includeScopes) {
+	                snippetManager.snippetMap[m.scope].includeScopes = m.includeScopes;
+	                m.includeScopes.forEach(function(x) {
+	                    loadSnippetFile("ace/mode/" + x);
+	                });
+	            }
+	        }
+	    });
+	};
+
+	function getCompletionPrefix(editor) {
+	    var pos = editor.getCursorPosition();
+	    var line = editor.session.getLine(pos.row);
+	    var prefix = util.retrievePrecedingIdentifier(line, pos.column);
+	    editor.completers.forEach(function(completer) {
+	        if (completer.identifierRegexps) {
+	            completer.identifierRegexps.forEach(function(identifierRegex) {
+	                if (!prefix && identifierRegex)
+	                    prefix = util.retrievePrecedingIdentifier(line, pos.column, identifierRegex);
+	            });
+	        }
+	    });
+	    return prefix;
 	}
 
-	/* WEBPACK VAR INJECTION */}.call(exports, (function() { return this; }())))
+	var doLiveAutocomplete = function(e) {
+	    var editor = e.editor;
+	    var text = e.args || "";
+	    var hasCompleter = editor.completer && editor.completer.activated;
+	    if (e.command.name === "backspace") {
+	        if (hasCompleter && !getCompletionPrefix(editor))
+	            editor.completer.detach();
+	    }
+	    else if (e.command.name === "insertstring") {
+	        var prefix = getCompletionPrefix(editor);
+	        if (prefix && !hasCompleter) {
+	            if (!editor.completer) {
+	                editor.completer = new Autocomplete();
+	            }
+	            editor.completer.autoSelect = false;
+	            editor.completer.autoInsert = false;
+	            editor.completer.showPopup(editor);
+	        }
+	    }
+	};
+
+	var Editor = acequire("../editor").Editor;
+	acequire("../config").defineOptions(Editor.prototype, "editor", {
+	    enableBasicAutocompletion: {
+	        set: function(val) {
+	            if (val) {
+	                if (!this.completers)
+	                    this.completers = Array.isArray(val)? val: completers;
+	                this.commands.addCommand(Autocomplete.startCommand);
+	            } else {
+	                this.commands.removeCommand(Autocomplete.startCommand);
+	            }
+	        },
+	        value: false
+	    },
+	    enableLiveAutocompletion: {
+	        set: function(val) {
+	            if (val) {
+	                if (!this.completers)
+	                    this.completers = Array.isArray(val)? val: completers;
+	                this.commands.on('afterExec', doLiveAutocomplete);
+	            } else {
+	                this.commands.removeListener('afterExec', doLiveAutocomplete);
+	            }
+	        },
+	        value: false
+	    },
+	    enableSnippets: {
+	        set: function(val) {
+	            if (val) {
+	                this.commands.addCommand(expandSnippet);
+	                this.on("changeMode", onChangeMode);
+	                onChangeMode(null, this);
+	            } else {
+	                this.commands.removeCommand(expandSnippet);
+	                this.off("changeMode", onChangeMode);
+	            }
+	        },
+	        value: false
+	    }
+	});
+	});
+	                (function() {
+	                    ace.acequire(["ace/ext/language_tools"], function() {});
+	                })();
+	            
+
+/***/ },
+/* 20 */
+/***/ function(module, exports) {
+
+	/* ***** BEGIN LICENSE BLOCK *****
+	 * Distributed under the BSD license:
+	 *
+	 * Copyright (c) 2010, Ajax.org B.V.
+	 * All rights reserved.
+	 * 
+	 * Redistribution and use in source and binary forms, with or without
+	 * modification, are permitted provided that the following conditions are met:
+	 *     * Redistributions of source code must retain the above copyright
+	 *       notice, this list of conditions and the following disclaimer.
+	 *     * Redistributions in binary form must reproduce the above copyright
+	 *       notice, this list of conditions and the following disclaimer in the
+	 *       documentation and/or other materials provided with the distribution.
+	 *     * Neither the name of Ajax.org B.V. nor the
+	 *       names of its contributors may be used to endorse or promote products
+	 *       derived from this software without specific prior written permission.
+	 * 
+	 * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+	 * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+	 * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+	 * DISCLAIMED. IN NO EVENT SHALL AJAX.ORG B.V. BE LIABLE FOR ANY
+	 * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+	 * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+	 * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+	 * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+	 * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+	 * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+	 *
+	 * ***** END LICENSE BLOCK ***** */
+
+	ace.define('ace/theme/jsoneditor', ['require', 'exports', 'module', 'ace/lib/dom'], function(acequire, exports, module) {
+
+	exports.isDark = false;
+	exports.cssClass = "ace-jsoneditor";
+	exports.cssText = ".ace-jsoneditor .ace_gutter {\
+	background: #ebebeb;\
+	color: #333\
+	}\
+	\
+	.ace-jsoneditor.ace_editor {\
+	font-family: droid sans mono, monospace, courier new, courier, sans-serif;\
+	line-height: 1.3;\
+	}\
+	.ace-jsoneditor .ace_print-margin {\
+	width: 1px;\
+	background: #e8e8e8\
+	}\
+	.ace-jsoneditor .ace_scroller {\
+	background-color: #FFFFFF\
+	}\
+	.ace-jsoneditor .ace_text-layer {\
+	color: gray\
+	}\
+	.ace-jsoneditor .ace_variable {\
+	color: #1a1a1a\
+	}\
+	.ace-jsoneditor .ace_cursor {\
+	border-left: 2px solid #000000\
+	}\
+	.ace-jsoneditor .ace_overwrite-cursors .ace_cursor {\
+	border-left: 0px;\
+	border-bottom: 1px solid #000000\
+	}\
+	.ace-jsoneditor .ace_marker-layer .ace_selection {\
+	background: #D5DDF6\
+	}\
+	.ace-jsoneditor.ace_multiselect .ace_selection.ace_start {\
+	box-shadow: 0 0 3px 0px #FFFFFF;\
+	border-radius: 2px\
+	}\
+	.ace-jsoneditor .ace_marker-layer .ace_step {\
+	background: rgb(255, 255, 0)\
+	}\
+	.ace-jsoneditor .ace_marker-layer .ace_bracket {\
+	margin: -1px 0 0 -1px;\
+	border: 1px solid #BFBFBF\
+	}\
+	.ace-jsoneditor .ace_marker-layer .ace_active-line {\
+	background: #FFFBD1\
+	}\
+	.ace-jsoneditor .ace_gutter-active-line {\
+	background-color : #dcdcdc\
+	}\
+	.ace-jsoneditor .ace_marker-layer .ace_selected-word {\
+	border: 1px solid #D5DDF6\
+	}\
+	.ace-jsoneditor .ace_invisible {\
+	color: #BFBFBF\
+	}\
+	.ace-jsoneditor .ace_keyword,\
+	.ace-jsoneditor .ace_meta,\
+	.ace-jsoneditor .ace_support.ace_constant.ace_property-value {\
+	color: #AF956F\
+	}\
+	.ace-jsoneditor .ace_keyword.ace_operator {\
+	color: #484848\
+	}\
+	.ace-jsoneditor .ace_keyword.ace_other.ace_unit {\
+	color: #96DC5F\
+	}\
+	.ace-jsoneditor .ace_constant.ace_language {\
+	color: darkorange\
+	}\
+	.ace-jsoneditor .ace_constant.ace_numeric {\
+	color: red\
+	}\
+	.ace-jsoneditor .ace_constant.ace_character.ace_entity {\
+	color: #BF78CC\
+	}\
+	.ace-jsoneditor .ace_invalid {\
+	color: #FFFFFF;\
+	background-color: #FF002A;\
+	}\
+	.ace-jsoneditor .ace_fold {\
+	background-color: #AF956F;\
+	border-color: #000000\
+	}\
+	.ace-jsoneditor .ace_storage,\
+	.ace-jsoneditor .ace_support.ace_class,\
+	.ace-jsoneditor .ace_support.ace_function,\
+	.ace-jsoneditor .ace_support.ace_other,\
+	.ace-jsoneditor .ace_support.ace_type {\
+	color: #C52727\
+	}\
+	.ace-jsoneditor .ace_string {\
+	color: green\
+	}\
+	.ace-jsoneditor .ace_comment {\
+	color: #BCC8BA\
+	}\
+	.ace-jsoneditor .ace_entity.ace_name.ace_tag,\
+	.ace-jsoneditor .ace_entity.ace_other.ace_attribute-name {\
+	color: #606060\
+	}\
+	.ace-jsoneditor .ace_markup.ace_underline {\
+	text-decoration: underline\
+	}\
+	.ace-jsoneditor .ace_indent-guide {\
+	background: url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAACCAYAAACZgbYnAAAAE0lEQVQImWP4////f4bLly//BwAmVgd1/w11/gAAAABJRU5ErkJggg==\") right repeat-y\
+	}";
+
+	var dom = acequire("../lib/dom");
+	dom.importCssString(exports.cssText, exports.cssClass);
+	});
+
+
+/***/ },
+/* 21 */
+/***/ function(module, exports) {
+
+	exports.locales = {
+	  en: { translation: {
+		'code' : 'Code',
+	    'code_title': 'Switch to code highlighter',
+		'form' : 'Form',
+	    'form_title': 'Switch to form editor',
+	    'text' : 'Text',
+	    'text_title': 'Switch to plain text editor',
+		'tree' : 'Tree',
+	    'tree_title': 'Switch to tree editor',
+		'view' : 'View',
+	    'view_title': 'Switch to tree view',
+		'box_title' : 'Switch editor mode',
+		'auto' : 'Auto',
+		'array' : 'Array',
+		'object' : 'Object',
+		'string' : 'String',
+		'sort' : 'Sort',
+		'ascending' : 'Ascending',
+		'descending' : 'Descending',
+		'append' : 'Append',
+		'insert' : 'Insert',
+		'duplicate' : 'Duplicate',
+		'remove' : 'Remove',
+		'type' : 'Type',
+		'auto_title': 'Field type "auto". ' +
+			  'The field type is automatically determined from the value ' +
+			  'and can be a string, number, boolean, or null.',
+		'object_title': 'Field type "object". ' +
+			  'An object contains an unordered set of key/value pairs.',
+		'array_title': 'Field type "array". ' +
+			  'An array contains an ordered collection of values.',
+		'string_title': 'Field type "string". ' +
+			  'Field type is not determined from the value, ' +
+			  'but always returned as string.',
+		'action_menu_title' : 'Click to open the actions menu (Ctrl+M)',
+		'expand_title' : 'Click to expand/collapse this field (Ctrl+E). \n' +
+	        'Ctrl+Click to expand/collapse including all childs.',
+		'type_title' : 'Change the type of this field',
+		'sort_title' : 'Sort the childs of this ',
+		'sort_asc_title' : 'Sort the childs of this in ascending order',
+		'sort_desc_title' : 'Sort the childs of this in descending order',
+		'insert_title' : 'Insert a new field with type \'auto\' before this field (Ctrl+Ins)',
+		'insert_submenu_title' : 'Select the type of the field to be inserted',
+		'append_title' : 'Append a new field with type \'auto\' after this field (Ctrl+Shift+Ins)',
+		'append_submenu_title' : 'Select the type of the field to be appended',
+		'duplicate_title' : 'Duplicate this field (Ctrl+D)',
+		'remove_title' : 'Remove this field (Ctrl+Del)',
+		'expand_title' : 'Expand all fields',
+		'collapse_title' : 'Collapse all fields',
+		'undo_title' : 'Undo last action (Ctrl+Z)',
+		'redo_title' : 'Redo (Ctrl+Shift+Z)',
+		'search_title' : 'Search fields and values',
+		'next_result' : 'Next result (Enter)',
+		'prev_result' : 'Previous result (Shift+Enter)',
+		'drag_title' : 'Drag to move this field (Alt+Shift+Arrows)',
+		'format_json_title' : 'Format JSON data, with proper indentation and line feeds (Ctrl+\\)',
+		'compact_json_title' : 'Compact JSON data, remove all whitespaces (Ctrl+Shift+\\)'
+		}
+	  },            
+	  la: { translation: {
+		'code' : 'Odecay',
+		'code_title' : 'TRANSLATED Code title',
+		'form' : 'Ormfay',
+		'form_title' : 'TRANSLATED Form title',
+	    'text' : 'Exttay',
+	    'text_title' : 'TRANSLATED Text title',
+		'tree' : 'Eetray',
+		'tree_title' : 'TRANSLATED Tree title',
+		'view' : 'Iewvay',
+		'view_title' : 'TRANSLATED View title',
+		'box_title' : 'TRANSLATED Switch editor mode',
+		'auto' : 'Autoway',
+		'array' : 'Arrayway',
+		'object' : 'Objectway',
+		'string' : 'Ingstray',
+		'sort' : 'Ortsay',
+		'ascending' : 'Ascendingway',
+		'descending' : 'Escendingday',
+		'append' : 'Appendway',
+		'insert' : 'Insertway',
+		'duplicate' : 'Uplicateday',
+		'remove' : 'Emoveray',
+		'type' : 'Ypetay',
+		'auto_title': 'TRANSLATED Field type "auto". ' +
+			  'The field type is automatically determined from the value ' +
+			  'and can be a string, number, boolean, or null.',
+		'object_title': 'TRANSLATED Field type "object". ' +
+			  'An object contains an unordered set of key/value pairs.',
+		'array_title': 'TRANSLATED Field type "array". ' +
+			  'An array contains an ordered collection of values.',
+		'string_title': 'TRANSLATED Field type "string". ' +
+			  'Field type is not determined from the value, ' +
+			  'but always returned as string.',
+		'action_menu_title' : 'TRANSLATED Click to open the actions menu (Ctrl+M)',
+		'expand_title' : 'TRANSLATED Click to expand/collapse this field (Ctrl+E). \n' +
+	        'Ctrl+Click to expand/collapse including all childs.',
+		'type_title' : 'TRANSLATED Change the type of this field',
+		'sort_title' : 'TRANSLATED Sort the childs of this ',
+		'sort_asc_title' : 'TRANSLATED Sort the childs of this in ascending order',
+		'sort_desc_title' : 'TRANSLATED Sort the childs of this in descending order',  
+		'insert_title' : 'TRANSLATED Insert a new field with type \'auto\' before this field (Ctrl+Ins)',
+		'insert_submenu_title' : 'TRANSLATED Select the type of the field to be inserted',
+		'append_title' : 'TRANSLATED Append a new field with type \'auto\' after this field (Ctrl+Shift+Ins)',
+		'append_submenu_title' : 'TRANSLATED Select the type of the field to be appended',
+		'duplicate_title' : 'TRANSLATED Duplicate this field (Ctrl+D)',
+		'remove_title' : 'TRANSLATED Remove this field (Ctrl+Del)',
+		'expand_title' : 'TRANSLATED Expand all fields',
+		'collapse_title' : 'TRANSLATED Collapse all fields',
+		'undo_title' : 'TRANSLATED Undo last action (Ctrl+Z)',
+		'redo_title' : 'TRANSLATED Redo (Ctrl+Shift+Z)',
+		'search_title' : 'TRANSLATED Search fields and values',
+		'next_result' : 'TRANSLATED Next result (Enter)',
+		'prev_result' : 'TRANSLATED Previous result (Shift+Enter)',
+		'drag_title' : 'TRANSLATED Drag to move this field (Alt+Shift+Arrows)',
+		'format_json_title' : 'TRANSLATED Format JSON data, with proper indentation and line feeds (Ctrl+\\)',
+		'compact_json_title' : 'TRANSLATED Compact JSON data, remove all whitespaces (Ctrl+Shift+\\)'
+		}
+	  }	
+	};
+
+
+
 
 /***/ }
 /******/ ])
