@@ -1,4 +1,5 @@
 var ContextMenu = require('./ContextMenu');
+var i18next = require('./i18next-1.10.1');
 
 /**
  * Create a select box to be used in the editor menu's, which allows to switch mode
@@ -9,8 +10,8 @@ var ContextMenu = require('./ContextMenu');
  */
 function createModeSwitcher(editor, modes, current) {
   // TODO: decouple mode switcher from editor
-
-  /**
+  //i18next.init({ resStore: resources.locales });
+   /**
    * Switch the mode of the editor
    * @param {String} mode
    */
@@ -28,36 +29,41 @@ function createModeSwitcher(editor, modes, current) {
   // available modes
   var availableModes = {
     code: {
-      'text': 'Code',
-      'title': 'Switch to code highlighter',
+      //'text': 'Code',
+	  'text' : i18next.t('code'),
+      'title': i18next.t('code_title'),
       'click': function () {
         switchMode('code')
       }
     },
     form: {
-      'text': 'Form',
-      'title': 'Switch to form editor',
+      //'text': 'Form',
+	  'text' : i18next.t('form'),
+      'title': i18next.t('form_title'),
       'click': function () {
         switchMode('form');
       }
     },
     text: {
-      'text': 'Text',
-      'title': 'Switch to plain text editor',
+      //'text': 'Text',
+	  'text' : i18next.t('text'),
+      'title': i18next.t('text_title'),
       'click': function () {
         switchMode('text');
       }
     },
     tree: {
-      'text': 'Tree',
-      'title': 'Switch to tree editor',
+      //'text': 'Tree',
+	  'text' : i18next.t('tree'),
+      'title': i18next.t('tree_title'),
       'click': function () {
         switchMode('tree');
       }
     },
     view: {
-      'text': 'View',
-      'title': 'Switch to tree view',
+      //'text': 'View',
+	  'text' : i18next.t('view'),
+      'title': i18next.t('view_title'),
       'click': function () {
         switchMode('view');
       }
@@ -88,7 +94,7 @@ function createModeSwitcher(editor, modes, current) {
   var box = document.createElement('button');
   box.className = 'modes separator';
   box.innerHTML = currentTitle + ' &#x25BE;';
-  box.title = 'Switch editor mode';
+  box.title = i18next.t('box_title');
   box.onclick = function () {
     var menu = new ContextMenu(items);
     menu.show(box);

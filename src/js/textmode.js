@@ -8,6 +8,7 @@ catch (err) {
 
 var modeswitcher = require('./modeswitcher');
 var util = require('./util');
+var i18next = require('./i18next-1.10.1');
 
 // create a mixin with the functions for text mode
 var textmode = {};
@@ -84,7 +85,7 @@ textmode.create = function (container, options) {
   // create format button
   var buttonFormat = document.createElement('button');
   buttonFormat.className = 'format';
-  buttonFormat.title = 'Format JSON data, with proper indentation and line feeds (Ctrl+\\)';
+  buttonFormat.title = i18next.t('format_json_title');
   this.menu.appendChild(buttonFormat);
   buttonFormat.onclick = function () {
     try {
@@ -98,7 +99,7 @@ textmode.create = function (container, options) {
   // create compact button
   var buttonCompact = document.createElement('button');
   buttonCompact.className = 'compact';
-  buttonCompact.title = 'Compact JSON data, remove all whitespaces (Ctrl+Shift+\\)';
+  buttonCompact.title = i18next.t('compact_json_title');
   this.menu.appendChild(buttonCompact);
   buttonCompact.onclick = function () {
     try {

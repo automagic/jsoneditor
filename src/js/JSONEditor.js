@@ -5,6 +5,8 @@ var n = require('./nodetypes');
 var Node = n.Node;
 var AppendNode = n.AppendNode;
 var ContextMenu = require('./ContextMenu');
+var i18next = require('./i18next-1.10.1');
+var resources = require('./resources');
 
 /**
  * @constructor JSONEditor
@@ -43,6 +45,8 @@ function JSONEditor (container, options, json) {
     throw new Error('Unsupported browser, IE9 or newer required. ' +
         'Please install the newest version of your browser.');
   }
+  
+  i18next.init({ resStore: resources.locales });
 
   if (arguments.length) {
     this._create(container, options, json);

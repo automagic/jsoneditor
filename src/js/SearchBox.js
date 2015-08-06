@@ -1,3 +1,5 @@
+var i18next = require('./i18next-1.10.1');
+
 /**
  * @constructor SearchBox
  * Create a search box in given HTML container
@@ -38,7 +40,7 @@ function SearchBox (editor, container) {
   var divInput = document.createElement('div');
   this.dom.input = divInput;
   divInput.className = 'frame';
-  divInput.title = 'Search fields and values';
+  divInput.title = i18next.t('search_title');
   td.appendChild(divInput);
 
   // table to contain the text input and search button
@@ -79,7 +81,7 @@ function SearchBox (editor, container) {
   tr.appendChild(td);
 
   var searchNext = document.createElement('button');
-  searchNext.title = 'Next result (Enter)';
+  searchNext.title = i18next.t('next_result');
   searchNext.className = 'next';
   searchNext.onclick = function () {
     searchBox.next();
@@ -89,7 +91,7 @@ function SearchBox (editor, container) {
   tr.appendChild(td);
 
   var searchPrevious = document.createElement('button');
-  searchPrevious.title = 'Previous result (Shift+Enter)';
+  searchPrevious.title = i18next.t('prev_result');
   searchPrevious.className = 'previous';
   searchPrevious.onclick = function () {
     searchBox.previous();

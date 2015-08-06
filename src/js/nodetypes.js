@@ -1,5 +1,6 @@
 var ContextMenu = require('./ContextMenu');
 var util = require('./util');
+var i18next = require('./i18next-1.10.1');
 
 /**
  * @constructor Node
@@ -1213,7 +1214,7 @@ Node.prototype.getDom = function() {
         var domDrag = document.createElement('button');
         dom.drag = domDrag;
         domDrag.className = 'dragarea';
-        domDrag.title = 'Drag to move this field (Alt+Shift+Arrows)';
+        domDrag.title = i18next.t('drag_title');
         tdDrag.appendChild(domDrag);
       }
     }
@@ -1224,7 +1225,7 @@ Node.prototype.getDom = function() {
     var menu = document.createElement('button');
     dom.menu = menu;
     menu.className = 'contextmenu';
-    menu.title = 'Click to open the actions menu (Ctrl+M)';
+    menu.title = i18next.t('action_menu_title');
     tdMenu.appendChild(dom.menu);
     dom.tr.appendChild(tdMenu);
   }
@@ -1689,9 +1690,7 @@ Node.prototype._createDomExpandButton = function () {
   var expand = document.createElement('button');
   if (this._hasChilds()) {
     expand.className = this.expanded ? 'expanded' : 'collapsed';
-    expand.title =
-        'Click to expand/collapse this field (Ctrl+E). \n' +
-        'Ctrl+Click to expand/collapse including all childs.';
+    expand.title = i18next.t('expand_title');
   }
   else {
     expand.className = 'invisible';
@@ -2584,6 +2583,11 @@ Node.prototype._hasChilds = function () {
 
 // titles with explanation for the different types
 Node.TYPE_TITLES = {
+  'auto': i18next.t('auto_title'),
+  'object': i18next.t('object_title'),
+  'array': i18next.t('array_title'),
+  'string': i18next.t('string_title')
+	  /*
   'auto': 'Field type "auto". ' +
       'The field type is automatically determined from the value ' +
       'and can be a string, number, boolean, or null.',
@@ -2594,6 +2598,7 @@ Node.TYPE_TITLES = {
   'string': 'Field type "string". ' +
       'Field type is not determined from the value, ' +
       'but always returned as string.'
+	  */
 };
 
 /**
@@ -2609,8 +2614,8 @@ Node.prototype.showContextMenu = function (anchor, onClose) {
 
   if (this.editable.value) {
     items.push({
-      text: 'Type',
-      title: 'Change the type of this field',
+      text: i18next.t('type'),
+      title: i18next.t('type_title'),
       className: 'type-' + this.type,
       submenu: [
         {
@@ -2623,7 +2628,7 @@ Node.prototype.showContextMenu = function (anchor, onClose) {
           }
         },
         {
-          text: 'Array',
+		  text: 'Array',
           className: 'type-array' +
               (this.type == 'array' ? ' selected' : ''),
           title: titles.array,
@@ -2656,25 +2661,25 @@ Node.prototype.showContextMenu = function (anchor, onClose) {
   if (this._hasChilds()) {
     var direction = ((this.sort == 'asc') ? 'desc': 'asc');
     items.push({
-      text: 'Sort',
-      title: 'Sort the childs of this ' + this.type,
+      text: i18next.t('sort'),
+      title: i18next.t('sort_title') + this.type,
       className: 'sort-' + direction,
       click: function () {
         node._onSort(direction);
       },
       submenu: [
         {
-          text: 'Ascending',
+          text: i18next.t('ascending'),
           className: 'sort-asc',
-          title: 'Sort the childs of this ' + this.type + ' in ascending order',
+          title: i18next.t('sort_asc_title'),
           click: function () {
             node._onSort('asc');
           }
         },
         {
-          text: 'Descending',
+          text: i18next.t('descending'),
           className: 'sort-desc',
-          title: 'Sort the childs of this ' + this.type +' in descending order',
+          title: i18next.t('sort_desc_title'),
           click: function () {
             node._onSort('desc');
           }
@@ -2695,7 +2700,7 @@ Node.prototype.showContextMenu = function (anchor, onClose) {
     var childs = node.parent.childs;
     if (node == childs[childs.length - 1]) {
       items.push({
-        text: 'Append',
+        text: i18next.t('append'),
         title: 'Append a new field with type \'auto\' after this field (Ctrl+Shift+Ins)',
         submenuTitle: 'Select the type of the field to be appended',
         className: 'append',
@@ -2712,7 +2717,7 @@ Node.prototype.showContextMenu = function (anchor, onClose) {
             }
           },
           {
-            text: 'Array',
+   		    text: 'Array',
             className: 'type-array',
             title: titles.array,
             click: function () {
@@ -2741,7 +2746,7 @@ Node.prototype.showContextMenu = function (anchor, onClose) {
 
     // create insert button
     items.push({
-      text: 'Insert',
+      text: i18next.t('insert'),
       title: 'Insert a new field with type \'auto\' before this field (Ctrl+Ins)',
       submenuTitle: 'Select the type of the field to be inserted',
       className: 'insert',
@@ -2758,7 +2763,7 @@ Node.prototype.showContextMenu = function (anchor, onClose) {
           }
         },
         {
-          text: 'Array',
+		  text: 'Array',
           className: 'type-array',
           title: titles.array,
           click: function () {
@@ -2787,7 +2792,7 @@ Node.prototype.showContextMenu = function (anchor, onClose) {
     if (this.editable.field) {
       // create duplicate button
       items.push({
-        text: 'Duplicate',
+        text: i18next.t('duplicate'),
         title: 'Duplicate this field (Ctrl+D)',
         className: 'duplicate',
         click: function () {
@@ -2797,7 +2802,7 @@ Node.prototype.showContextMenu = function (anchor, onClose) {
 
       // create remove button
       items.push({
-        text: 'Remove',
+        text: i18next.t('remove'),
         title: 'Remove this field (Ctrl+Del)',
         className: 'remove',
         click: function () {
@@ -3062,7 +3067,7 @@ AppendNode.prototype.showContextMenu = function (anchor, onClose) {
             }
           },
           {
-            'text': 'Array',
+		    'text': 'Array',
             'className': 'type-array',
             'title': titles.array,
             'click': function () {
@@ -3090,7 +3095,7 @@ AppendNode.prototype.showContextMenu = function (anchor, onClose) {
     var items = [
       // create append button
       {
-        'text': 'Append',
+        'text': i18next.t('append'),
         'title': 'Append a new field with type \'auto\' (Ctrl+Shift+Ins)',
         'submenuTitle': 'Select the type of the field to be appended',
         'className': 'insert',
