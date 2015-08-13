@@ -57,66 +57,7 @@ exports.locales = {
 	'format_json_title' : 'Format JSON data, with proper indentation and line feeds (Ctrl+\\)',
 	'compact_json_title' : 'Compact JSON data, remove all whitespaces (Ctrl+Shift+\\)'
 	}
-  },            
-  la: { translation: {
-	'code' : 'Odecay',
-	'code_title' : 'TRANSLATED Code title',
-	'form' : 'Ormfay',
-	'form_title' : 'TRANSLATED Form title',
-    'text' : 'Exttay',
-    'text_title' : 'TRANSLATED Text title',
-	'tree' : 'Eetray',
-	'tree_title' : 'TRANSLATED Tree title',
-	'view' : 'Iewvay',
-	'view_title' : 'TRANSLATED View title',
-	'box_title' : 'TRANSLATED Switch editor mode',
-	'auto' : 'Autoway',
-	'array' : 'Arrayway',
-	'object' : 'Objectway',
-	'string' : 'Ingstray',
-	'sort' : 'Ortsay',
-	'ascending' : 'Ascendingway',
-	'descending' : 'Escendingday',
-	'append' : 'Appendway',
-	'insert' : 'Insertway',
-	'duplicate' : 'Uplicateday',
-	'remove' : 'Emoveray',
-	'type' : 'Ypetay',
-	'auto_title': 'TRANSLATED Field type "auto". ' +
-		  'The field type is automatically determined from the value ' +
-		  'and can be a string, number, boolean, or null.',
-	'object_title': 'TRANSLATED Field type "object". ' +
-		  'An object contains an unordered set of key/value pairs.',
-	'array_title': 'TRANSLATED Field type "array". ' +
-		  'An array contains an ordered collection of values.',
-	'string_title': 'TRANSLATED Field type "string". ' +
-		  'Field type is not determined from the value, ' +
-		  'but always returned as string.',
-	'action_menu_title' : 'TRANSLATED Click to open the actions menu (Ctrl+M)',
-	'expand_title' : 'TRANSLATED Click to expand/collapse this field (Ctrl+E). \n' +
-        'Ctrl+Click to expand/collapse including all childs.',
-	'type_title' : 'TRANSLATED Change the type of this field',
-	'sort_title' : 'TRANSLATED Sort the childs of this ',
-	'sort_asc_title' : 'TRANSLATED Sort the childs of this in ascending order',
-	'sort_desc_title' : 'TRANSLATED Sort the childs of this in descending order',  
-	'insert_title' : 'TRANSLATED Insert a new field with type \'auto\' before this field (Ctrl+Ins)',
-	'insert_submenu_title' : 'TRANSLATED Select the type of the field to be inserted',
-	'append_title' : 'TRANSLATED Append a new field with type \'auto\' after this field (Ctrl+Shift+Ins)',
-	'append_submenu_title' : 'TRANSLATED Select the type of the field to be appended',
-	'duplicate_title' : 'TRANSLATED Duplicate this field (Ctrl+D)',
-	'remove_title' : 'TRANSLATED Remove this field (Ctrl+Del)',
-	'expand_title' : 'TRANSLATED Expand all fields',
-	'collapse_title' : 'TRANSLATED Collapse all fields',
-	'undo_title' : 'TRANSLATED Undo last action (Ctrl+Z)',
-	'redo_title' : 'TRANSLATED Redo (Ctrl+Shift+Z)',
-	'search_title' : 'TRANSLATED Search fields and values',
-	'next_result' : 'TRANSLATED Next result (Enter)',
-	'prev_result' : 'TRANSLATED Previous result (Shift+Enter)',
-	'drag_title' : 'TRANSLATED Drag to move this field (Alt+Shift+Arrows)',
-	'format_json_title' : 'TRANSLATED Format JSON data, with proper indentation and line feeds (Ctrl+\\)',
-	'compact_json_title' : 'TRANSLATED Compact JSON data, remove all whitespaces (Ctrl+Shift+\\)'
-	}
-  }	
+  }
 };
 
 
